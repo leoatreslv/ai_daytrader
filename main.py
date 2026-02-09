@@ -7,6 +7,8 @@ from llm_client import LLMClient
 from datetime import datetime
 from logger import setup_logger
 
+from notification import NotificationManager, TelegramProvider
+
 logger = setup_logger("Main")
 
 def main():
@@ -16,6 +18,12 @@ def main():
     fix_client = CTraderFixClient()
     llm = LLMClient()
     loader = DataLoader(fix_client)
+    
+    # Initialize Notifications
+    notifier = NotificationManager()
+    if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+        notifier.add_provider(TelegramProvider(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
+        logger.info("Telegram notifications enabled.")
     
     # Strategy would need updates to handle integer symbol IDs, but logic remains
     strategy = Strategy(fix_client, llm) 
@@ -46,7 +54,9 @@ def main():
                      # Run Strategy
                      signal = strategy.check_signal(df)
                      if signal:
-                         logger.info(f"SIGNAL DETECTED: {signal}")
+                         msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol}\nAction: {signal['action']}\nReason: {signal['reason']}"
+                         logger.info(msg)
+                         notifier.notify(msg)
                          
                          # Determine Side
                          if signal['action'] == 'BUY_CALL':
@@ -60,7 +70,10 @@ def main():
                          
                          # Execute Entry (Market)
                          fix_client.submit_order(symbol, config.TRADE_QTY, side, order_type='1')
-                         logger.info(f"Executed ENTRY {side} for {symbol}")
+                         
+                         entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol}"
+                         logger.info(entry_msg)
+                         notifier.notify(entry_msg)
                          
                          # Calculate Risk Management Prices
                          # Get current price (approximate from bar close)
@@ -84,6 +97,8 @@ def main():
                          # TAKE PROFIT (Limit Order)
                          fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='2', price=f"{tp_price:.5f}")
                          logger.info(f"Placed TAKE PROFIT at {tp_price:.5f}")
+                         
+                         notifier.notify(f"🛡️ **PROTECTION PLACED**\nSL: {sl_price:.5f}\nTP: {tp_price:.5f}")
                          
                          # Sleep to avoid spamming signals
                          if smart_sleep(60):

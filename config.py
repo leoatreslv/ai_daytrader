@@ -22,6 +22,10 @@ LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:8000/v1")
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "facebook/opt-125m")
 LLM_CONTEXT_WINDOW = int(os.getenv("LLM_CONTEXT_WINDOW", "4096"))
 
+# Notification Configuration
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 # Trading Parameters
 # Trading Parameters
 TARGET_SYMBOLS = ["41"] # XAUUSD (ID 41)
