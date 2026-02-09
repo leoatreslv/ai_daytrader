@@ -47,9 +47,16 @@
 -   `/status`: Checks if the bot is connected to cTrader (Quote & Trade).
 -   `/orders`: Lists all currently active (working) orders.
 -   `/positions` (or `/pos`: Lists all open positions with net quantity.
--   `/sync`: Manually fetches active Orders & Positions from the server (Use after restart).
+-   `/pos`: Lists all open positions with net quantity.
+-   `/sync`: Manually fetches active Orders & Positions from the server.
+-   `/chart`: Generates and sends a candlestick chart of the active symbol.
 -   `/symbol <SYMBOL>`: Switches the active trading symbol (e.g., `/symbol EURUSD`).
 -   `/help`: Displays the list of available commands.
+
+### 6. Periodic Charting
+-   **What**: The bot automatically generates and sends a candlestick chart every 2 hours.
+-   **Why**: To provide visual context on the active symbol's price action without user intervention.
+-   **How**: Implemented in `main.py` loop using `mplfinance`.
 
 ### Troubleshooting
 **Error: `PermissionError: [Errno 13] Permission denied`**
