@@ -325,6 +325,7 @@ class CTraderFixClient:
         elif msg_type == b'8': # Execution Report
             exec_type = msg.get(150) # 0=New, F=Trade, 8=Rejected
             ord_status = msg.get(39) # 0=New, 1=PartiallyFilled, 2=Filled, 8=Rejected
+            order_id = msg.get(37).decode() if msg.get(37) else "Unknown"
             symbol = msg.get(55).decode() if msg.get(55) else "Unknown"
             side = msg.get(54) # 1=Buy, 2=Sell
             side_str = "BUY" if side == b'1' else "SELL"
