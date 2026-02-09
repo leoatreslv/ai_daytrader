@@ -203,6 +203,43 @@ class CTraderFixClient:
         self.market_data_callbacks = []
         self.latest_prices = {} # Store latest price by SymbolID
         self.symbol_map = {}
+        # Tracking State (In-Memory)
+        self.open_orders = {} # OrderID -> {Symbol, Side, Qty, Price}
+        self.positions = {} # SymbolID -> NetQty (+Buy, -Sell)
+
+    def get_orders_string(self):
+        if not self.open_orders:
+            return "📭 **NO ACTIVE ORDERS**"
+        
+        lines = ["📋 **ACTIVE ORDERS**"]
+        for oid, details in self.open_orders.items():
+            lines.append(f"- {details['side']} {details['symbol']} {details['qty']} @ {details['price']}")
+        return "\n".join(lines)
+
+    def get_positions_string(self):
+        if not self.positions:
+            return "🧘 **NO OPEN POSITIONS**"
+            
+        lines = ["💼 **CURRENT POSITIONS**"]
+        has_pos = False
+        for sym_id, qty in self.positions.items():
+            if qty == 0: continue
+            has_pos = True
+            
+            # Try to resolve name
+            sym_name = sym_id
+            for name, sid in self.symbol_map.items():
+                if sid == str(sym_id):
+                    sym_name = name
+                    break
+            
+            side = "LONG" if qty > 0 else "SHORT"
+            lines.append(f"- {sym_name}: {side} {abs(qty)}")
+            
+        if not has_pos:
+            return "🧘 **NO OPEN POSITIONS**"
+            
+        return "\n".join(lines)
         
     def handle_market_data(self, symbol_id, price):
         # Update internal cache
