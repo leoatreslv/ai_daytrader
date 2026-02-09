@@ -457,6 +457,8 @@ class CTraderFixClient:
         return None
 
     def handle_market_data(self, symbol_id, price):
+        self.latest_prices[symbol_id] = price
+        self.last_price_times[symbol_id] = datetime.now()
         for cb in self.market_data_callbacks:
             cb(symbol_id, price)
 

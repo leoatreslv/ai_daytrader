@@ -67,7 +67,16 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
                         notifier.notify(f"❌ Error processing command: {e}")
                 
                 elif cmd == "/status" or cmd == "/statis": # Handle typo
-                    notifier.notify(f"ℹ️ **STATUS**\nActive Symbol: {active_symbols}\nConnected: {fix_client.quote_session.connected}")
+                    msg = f"ℹ️ **STATUS**\nComputed Active Symbol: {active_symbols}\nConnected: {fix_client.quote_session.connected}"
+                    
+                    if active_symbols:
+                        sym = active_symbols[0]
+                        price = fix_client.latest_prices.get(sym, "Waiting...")
+                        t_check = fix_client.last_price_times.get(sym)
+                        t_str = t_check.strftime("%H:%M:%S") if t_check else "N/A"
+                        msg += f"\n\nPrice: {price}\nUpdated: {t_str}"
+                        
+                    notifier.notify(msg)
                 
                 elif cmd == "/help":
                     notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/orders` - List active orders\n`/positions` - List open positions\n`/sync` - Manual State Sync\n`/chart` - Generate Price Chart\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
