@@ -43,7 +43,7 @@ class LLMClient:
 
         try:
             logger.debug(f"Sending request to LLM: {self.model}")
-            response = requests.post(f"{self.api_url}/chat/completions", json=payload, timeout=10)
+            response = requests.post(f"{self.api_url}/chat/completions", json=payload, timeout=30)
             if response.status_code == 200:
                 result = response.json()
                 content = result['choices'][0]['message']['content']

@@ -53,8 +53,7 @@ class TelegramProvider(NotificationProvider):
         try:
             payload = {
                 "chat_id": self.chat_id,
-                "text": message,
-                "parse_mode": "Markdown"
+                "text": message
             }
             response = requests.post(f"{self.base_url}/sendMessage", json=payload, timeout=5)
             if response.status_code != 200:

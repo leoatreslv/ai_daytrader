@@ -465,6 +465,15 @@ class CTraderFixClient:
                 return v
         return None
 
+    def get_symbol_name(self, symbol_id):
+        """Resolve symbol ID to Name (Reverse Lookup)."""
+        # Linear search (map is small)
+        str_id = str(symbol_id)
+        for name, sid in self.symbol_map.items():
+            if str(sid) == str_id:
+                return name
+        return str_id # Return ID if name not found
+
 
 
     def subscribe_market_data(self, symbol_id, request_id):

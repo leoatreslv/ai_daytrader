@@ -215,8 +215,9 @@ def main():
                     if df is not None and len(df) > 20:
                          # Run Strategy
                          signal = strategy.check_signal(df)
-                         if signal:
-                             msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol}\nAction: {signal['action']}\nReason: {signal['reason']}"
+                     if signal:
+                         symbol_name = fix_client.get_symbol_name(symbol)
+                         msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal['action']}\nReason: {signal['reason']}"
                              logger.info(msg)
                              notifier.notify(msg)
                              
@@ -234,7 +235,7 @@ def main():
                              # Use timestamp for unique ClOrdID to avoid duplicates
                              fix_client.submit_order(symbol, config.TRADE_QTY, side, order_type='1')
                              
-                             entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol}"
+                             entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol_name}"
                              logger.info(entry_msg)
                              notifier.notify(entry_msg)
                              
