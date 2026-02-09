@@ -22,6 +22,7 @@ class FixSession:
         self.sock = None
         self.parser = simplefix.FixParser()
         self.connected = False
+        self.logged_on = False
         self.msg_seq_num = 1
         self.running = False
         
@@ -157,6 +158,7 @@ class FixSession:
                  self.app.on_disconnected(self.sender_sub_id, "Connection Reset/Closed")
         
         self.connected = False
+        self.logged_on = False
 
     def handle_message(self, msg):
         msg_type = msg.get(35)
@@ -169,13 +171,23 @@ class FixSession:
         elif msg_type == b'5': # Logout
             logger.info(f"[{self.sender_sub_id}] Logout received: {msg.get(58)}")
             self.running = False
+            self.logged_on = False
         elif msg_type == b'A': # Logon
+            self.logged_on = True
             logger.info(f"[{self.sender_sub_id}] Logged On!")
         
         # Pass to main app logic
         self.app.on_message(self.sender_sub_id, msg)
 
+
 class CTraderFixClient:
+    # Fallback map for common symbols (Demo/Live IDs are usually consistent for majors)
+    COMMON_SYMBOLS = {
+        "EURUSD": "1", "GBPUSD": "2", "USDJPY": "4", "GBPJPY": "6", 
+        "AUDUSD": "9", "NZDUSD": "13", "USDCAD": "14", "USDCHF": "15",
+        "XAUUSD": "41", "ETHUSD": "1002", "BTCUSD": "1001"
+    }
+
     def __init__(self, notifier=None):
         self.notifier = notifier
         self.quote_session = FixSession(
@@ -267,14 +279,16 @@ class CTraderFixClient:
                  # Map Name -> ID (e.g. "EURUSD" -> "1")
                  self.symbol_map[sym_name.decode()] = sym_id.decode()
                  # Also valid to map "EUR/USD" or other variations if needed later based on 107 format
+        
+        else:
+            logger.debug(f"[{source}] Unknown MsgType: {msg_type}")
 
     def send_security_list_request(self):
         """Request list of all symbols to build the map."""
         msg = simplefix.FixMessage()
         self.quote_session._add_header(msg, "x")
-        msg.append_pair(320, "3") # SecurityListRequestType = All Securities
-        msg.append_pair(263, "1") # SubscriptionRequestType = Snapshot
-        msg.append_pair(321, "0") # RequestType = Symbol
+        msg.append_pair(320, "1") # SecurityReqID
+        msg.append_pair(559, "4") # SecurityListRequestType = All Securities
         self.quote_session._send_raw(msg)
 
     def fetch_symbols(self):
@@ -285,13 +299,22 @@ class CTraderFixClient:
 
         logger.info("Fetching symbol list...")
         self.symbol_map.clear()
-        self.send_security_list_request()
         
-        # Wait for symbols to populate (simple timeout for demo)
-        for _ in range(10): # Wait up to 5 seconds
-            time.sleep(0.5)
-            if len(self.symbol_map) > 10: # Assuming we get at least some
-                break
+        # Try API Fetch
+        try:
+            self.send_security_list_request()
+            # Wait for symbols to populate
+            for _ in range(10): # Wait up to 5 seconds
+                time.sleep(0.5)
+                if len(self.symbol_map) > 10: 
+                    break
+        except Exception as e:
+            logger.error(f"Error requesting symbol list: {e}")
+
+        # Fallback if API failed
+        if len(self.symbol_map) == 0:
+            logger.warning("API Symbol fetch failed (or empty). Using Common Symbol Fallback.")
+            self.symbol_map.update(self.COMMON_SYMBOLS)
         
         logger.info(f"Loaded {len(self.symbol_map)} symbols.")
 
