@@ -202,6 +202,7 @@ class CTraderFixClient:
         )
         self.market_data_callbacks = []
         self.latest_prices = {} # Store latest price by SymbolID
+        self.last_price_times = {} # Store last update time
         self.symbol_map = {}
         # Tracking State (In-Memory)
         self.open_orders = {} # OrderID -> {Symbol, Side, Qty, Price}
