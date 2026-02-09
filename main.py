@@ -7,6 +7,7 @@ from llm_client import LLMClient
 from datetime import datetime
 from logger import setup_logger
 
+from notification import NotificationManager, TelegramProvider
 from charting import generate_candlestick_chart
 
 logger = setup_logger("Main")
