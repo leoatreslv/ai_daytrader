@@ -215,9 +215,9 @@ def main():
                     if df is not None and len(df) > 20:
                          # Run Strategy
                          signal = strategy.check_signal(df)
-                     if signal:
-                         symbol_name = fix_client.get_symbol_name(symbol)
-                         msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal['action']}\nReason: {signal['reason']}"
+                         if signal:
+                             symbol_name = fix_client.get_symbol_name(symbol)
+                             msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal['action']}\nReason: {signal['reason']}"
                              logger.info(msg)
                              notifier.notify(msg)
                              
