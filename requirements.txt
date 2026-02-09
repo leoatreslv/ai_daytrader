@@ -1,6 +1,6 @@
 setuptools
 simplefix
-pandas-ta-remake
+pandas_ta @ https://github.com/twopirllc/pandas-ta/archive/development.zip
 scikit-learn
 python-dotenv
 requests
