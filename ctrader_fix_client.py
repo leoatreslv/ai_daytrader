@@ -109,10 +109,14 @@ class FixSession:
         
         # Debug Log (Mask Password)
         try:
-            debug_msg = msg.encode().replace(self.password.encode(), b"******")
+            raw_msg = msg.encode()
+            if self.password:
+                debug_msg = raw_msg.replace(self.password.encode(), b"******")
+            else:
+                debug_msg = raw_msg # No password to mask
             logger.info(f"[{self.sender_sub_id}] Sending Logon: {debug_msg}")
-        except:
-             logger.info(f"[{self.sender_sub_id}] Sending Logon (encoding failed to log)")
+        except Exception as e:
+             logger.error(f"[{self.sender_sub_id}] Logon log error: {e}")
         
         self._send_raw(msg)
 

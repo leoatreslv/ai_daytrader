@@ -8,8 +8,14 @@ CT_HOST = "demo-uk-eqx-01.p.c-trader.com"
 CT_QUOTE_PORT = 5211 # SSL
 CT_TRADE_PORT = 5212 # SSL
 CT_SENDER_COMP_ID = os.getenv("CT_SENDER_COMP_ID")
+if not CT_SENDER_COMP_ID:
+    raise ValueError("MISSING CONFIG: CT_SENDER_COMP_ID is not set in .env")
+
 CT_TARGET_COMP_ID = "cServer"
+
 CT_PASSWORD = os.getenv("CT_PASSWORD")
+if not CT_PASSWORD:
+    raise ValueError("MISSING CONFIG: CT_PASSWORD is not set in .env")
 
 # LLM Configuration
 LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:8000/v1") 
