@@ -36,14 +36,24 @@ def listen_for_commands(notifier, fix_client):
                     try:
                         parts = cmd.split()
                         if len(parts) == 2:
-                            new_symbol = parts[1]
+                            raw_input = parts[1]
+                            
+                            # Try to resolve name -> ID
+                            resolved_id = fix_client.get_symbol_id(raw_input)
+                            
+                            if resolved_id:
+                                new_symbol = resolved_id
+                                logger.info(f"Resolved command '{raw_input}' -> ID {new_symbol}")
+                            else:
+                                # Assume it's a raw ID
+                                new_symbol = raw_input
                             
                             # Normalize (remove old, add new - simplified single symbol mode for now)
                             old_symbol = active_symbols[0] if active_symbols else "None"
                             active_symbols = [new_symbol] 
                             
-                            logger.info(f"Command received: Switch {old_symbol} -> {new_symbol}")
-                            notifier.notify(f"🔄 **SWITCHING INSTRUMENT**\nOld: {old_symbol}\nNew: {new_symbol}")
+                            logger.info(f"Command received: Switch {old_symbol} -> {new_symbol} ({raw_input})")
+                            notifier.notify(f"🔄 **SWITCHING INSTRUMENT**\nOld: {old_symbol}\nNew: {new_symbol} ({raw_input})")
                             
                             # Subscribe to new symbol
                             fix_client.subscribe_market_data(new_symbol, f"req_{new_symbol}")
@@ -88,8 +98,25 @@ def main():
     
     # Start Connection
     fix_client.start()
+    
+    # Fetch all symbols (Name -> ID)
+    fix_client.fetch_symbols()
 
     # Initial Subscription
+    # Resolve initial symbols if they are names
+    initial_ids = []
+    for s in active_symbols:
+        res_id = fix_client.get_symbol_id(s)
+        if res_id:
+            logger.info(f"Resolved {s} -> {res_id}")
+            initial_ids.append(res_id)
+        else:
+             # Assume it's already an ID if not found, or user config error
+             logger.warning(f"Could not resolve {s}, assuming it's an ID.")
+             initial_ids.append(s)
+             
+    active_symbols = initial_ids
+
     for symbol in active_symbols:
         logger.info(f"Subscribing to {symbol}...")
         fix_client.subscribe_market_data(symbol, f"req_{symbol}")

@@ -189,6 +189,7 @@ class CTraderFixClient:
             config.CT_PASSWORD, "TRADE", self
         )
         self.market_data_callbacks = []
+        self.symbol_map = {}
         
     def start(self):
         logger.info("Connecting to cTrader FIX...")
@@ -257,6 +258,55 @@ class CTraderFixClient:
             
         elif msg_type == b'Y': # Market Data Request Reject
             logger.warning(f"[{source}] MD REJECT: {msg.get(58)} (ReqID: {msg.get(262)})")
+
+        elif msg_type == b'y': # Security List
+             # cTrader sends 55=ID, 107=Description (Name)
+             sym_id = msg.get(55)
+             sym_name = msg.get(107)
+             if sym_id and sym_name:
+                 # Map Name -> ID (e.g. "EURUSD" -> "1")
+                 self.symbol_map[sym_name.decode()] = sym_id.decode()
+                 # Also valid to map "EUR/USD" or other variations if needed later based on 107 format
+
+    def send_security_list_request(self):
+        """Request list of all symbols to build the map."""
+        msg = simplefix.FixMessage()
+        self.quote_session._add_header(msg, "x")
+        msg.append_pair(320, "3") # SecurityListRequestType = All Securities
+        msg.append_pair(263, "1") # SubscriptionRequestType = Snapshot
+        msg.append_pair(321, "0") # RequestType = Symbol
+        self.quote_session._send_raw(msg)
+
+    def fetch_symbols(self):
+        """Blocking call to fetch symbols."""
+        if not self.quote_session.connected:
+            logger.warning("Cannot fetch symbols: Quote session not connected.")
+            return
+
+        logger.info("Fetching symbol list...")
+        self.symbol_map.clear()
+        self.send_security_list_request()
+        
+        # Wait for symbols to populate (simple timeout for demo)
+        for _ in range(10): # Wait up to 5 seconds
+            time.sleep(0.5)
+            if len(self.symbol_map) > 10: # Assuming we get at least some
+                break
+        
+        logger.info(f"Loaded {len(self.symbol_map)} symbols.")
+
+    def get_symbol_id(self, name):
+        """Resolve symbol name to ID (Case-Insensitive)."""
+        # Direct lookup
+        if name in self.symbol_map:
+             return self.symbol_map[name]
+        
+        # Case insensitive lookup
+        name_upper = name.upper()
+        for k, v in self.symbol_map.items():
+            if k.upper() == name_upper:
+                return v
+        return None
 
     def handle_market_data(self, symbol_id, price):
         for cb in self.market_data_callbacks:
