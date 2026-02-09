@@ -1,3 +1,4 @@
+setuptools
 simplefix
 pandas-ta-remake
 scikit-learn
