@@ -11,7 +11,53 @@ from notification import NotificationManager, TelegramProvider
 
 logger = setup_logger("Main")
 
+# Shared state for dynamic control
+active_symbols = list(config.TARGET_SYMBOLS)
+running = True
+
+def listen_for_commands(notifier, fix_client):
+    """Background thread to listen for Telegram commands."""
+    global active_symbols, running
+    
+    logger.info("Command listener started.")
+    
+    while running:
+        try:
+            cmds = notifier.check_commands()
+            for cmd in cmds:
+                if cmd.startswith("/symbol"):
+                    # Format: /symbol 1
+                    try:
+                        parts = cmd.split()
+                        if len(parts) == 2:
+                            new_symbol = parts[1]
+                            
+                            # Normalize (remove old, add new - simplified single symbol mode for now)
+                            old_symbol = active_symbols[0] if active_symbols else "None"
+                            active_symbols = [new_symbol] 
+                            
+                            logger.info(f"Command received: Switch {old_symbol} -> {new_symbol}")
+                            notifier.notify(f"🔄 **SWITCHING INSTRUMENT**\nOld: {old_symbol}\nNew: {new_symbol}")
+                            
+                            # Subscribe to new symbol
+                            fix_client.subscribe_market_data(new_symbol, f"req_{new_symbol}")
+                            
+                        else:
+                            notifier.notify("❌ Invalid format. Use: `/symbol <id>`")
+                    except Exception as e:
+                        logger.error(f"Command processing error: {e}")
+                        notifier.notify(f"❌ Error processing command: {e}")
+                
+                elif cmd == "/status":
+                    notifier.notify(f"ℹ️ **STATUS**\nActive Symbol: {active_symbols}\nConnected: {fix_client.quote_session.connected}")
+
+            time.sleep(2) # Poll interval
+        except Exception as e:
+            logger.error(f"Listener error: {e}")
+            time.sleep(5)
+
 def main():
+    global running
     logger.info("Starting AI Day Trader (cTrader FIX)...")
     
     # Initialize Notifications
@@ -21,35 +67,39 @@ def main():
         logger.info("Telegram notifications enabled.")
     
     # Initialize Clients
-    # Strategy would need updates to handle integer symbol IDs, but logic remains
     fix_client = CTraderFixClient(notifier=notifier)
     llm = LLMClient()
     loader = DataLoader(fix_client)
     
-    # Strategy would need updates to handle integer symbol IDs, but logic remains
+    # Strategy
     strategy = Strategy(fix_client, llm) 
     
     # Start Connection
     fix_client.start()
 
-    # Subscribe to Market Data
-    # Assuming "1" is EURUSD (Symbol ID). 
-    # NOTE: User needs to find correct IDs for SPY/QQQ equivalent on cTrader Demo.
-    for symbol in config.TARGET_SYMBOLS:
+    # Initial Subscription
+    for symbol in active_symbols:
         logger.info(f"Subscribing to {symbol}...")
         fix_client.subscribe_market_data(symbol, f"req_{symbol}")
+    
+    # Start Command Listener
+    import threading
+    cmd_thread = threading.Thread(target=listen_for_commands, args=(notifier, fix_client), daemon=True)
+    cmd_thread.start()
     
     logger.info("Entering Main Loop...")
     while True:
         try:
             # Check Stop
             if check_stop():
+                running = False
                 break
 
             # Main strategy loop
-            # FIX is event-driven (callbacks), but we can poll aggregated bars here
+            # Use copy of active_symbols to handle dynamic changes safely
+            current_targets = list(active_symbols)
             
-            for symbol in config.TARGET_SYMBOLS:
+            for symbol in current_targets:
                 df = loader.get_latest_bars(symbol)
                 if df is not None and len(df) > 20:
                      # Run Strategy
@@ -70,16 +120,15 @@ def main():
                              bias = -1
                          
                          # Execute Entry (Market)
+                         # Use timestamp for unique ClOrdID to avoid duplicates
                          fix_client.submit_order(symbol, config.TRADE_QTY, side, order_type='1')
                          
                          entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol}"
                          logger.info(entry_msg)
                          notifier.notify(entry_msg)
                          
-                         # Calculate Risk Management Prices
-                         # Get current price (approximate from bar close)
+                         # Calculate Risk
                          current_price = df.iloc[-1]['close']
-                         
                          stop_dist = current_price * config.STOP_LOSS_PCT
                          tp_dist = current_price * config.TAKE_PROFIT_PCT
                          
@@ -90,34 +139,28 @@ def main():
                              sl_price = current_price + stop_dist
                              tp_price = current_price - tp_dist
                              
-                         # Place Protection Orders (Blindly for now, assuming entry fills)
-                         # STOP LOSS (Stop Order)
+                         # Protection
                          fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='3', stop_px=f"{sl_price:.5f}")
-                         logger.info(f"Placed STOP LOSS at {sl_price:.5f}")
-                         
-                         # TAKE PROFIT (Limit Order)
                          fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='2', price=f"{tp_price:.5f}")
-                         logger.info(f"Placed TAKE PROFIT at {tp_price:.5f}")
                          
                          notifier.notify(f"🛡️ **PROTECTION PLACED**\nSL: {sl_price:.5f}\nTP: {tp_price:.5f}")
                          
-                         # Sleep to avoid spamming signals
                          if smart_sleep(60):
+                             running = False
                              break
             
-            # Heartbeat Log
-            if int(time.time()) % 10 == 0:
-                 pass
-            
             if smart_sleep(1):
+                running = False
                 break
 
         except KeyboardInterrupt:
             logger.info("Stopping...")
+            running = False
             break
         except Exception as e:
             logger.error(f"Error: {e}")
             if smart_sleep(1):
+                running = False
                 break
 
 

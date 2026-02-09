@@ -14,8 +14,9 @@ class TelegramProvider(NotificationProvider):
     """Sends notifications via Telegram Bot API."""
     def __init__(self, token: str, chat_id: str):
         self.token = token
-        self.chat_id = chat_id
-        self.base_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+        self.chat_id = str(chat_id)
+        self.base_url = f"https://api.telegram.org/bot{self.token}"
+        self.last_update_id = 0
 
     def send_message(self, message: str):
         if not self.token or not self.chat_id:
@@ -28,11 +29,42 @@ class TelegramProvider(NotificationProvider):
                 "text": message,
                 "parse_mode": "Markdown"
             }
-            response = requests.post(self.base_url, json=payload, timeout=5)
+            response = requests.post(f"{self.base_url}/sendMessage", json=payload, timeout=5)
             if response.status_code != 200:
                 logger.error(f"Telegram send failed: {response.text}")
         except Exception as e:
             logger.error(f"Telegram connection error: {e}")
+
+    def check_for_commands(self):
+        """Polls for new commands from the authorized chat_id."""
+        if not self.token or not self.chat_id:
+            return []
+
+        commands = []
+        try:
+            # timeout=0 for immediate return (we will control polling interval in main)
+            url = f"{self.base_url}/getUpdates?offset={self.last_update_id + 1}&timeout=1"
+            response = requests.get(url, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("ok"):
+                    for result in data.get("result", []):
+                        update_id = result.get("update_id")
+                        self.last_update_id = max(self.last_update_id, update_id)
+                        
+                        message = result.get("message", {})
+                        chat = message.get("chat", {})
+                        text = message.get("text", "")
+                        
+                        # Security: Only accept commands from the configured chat_id
+                        if str(chat.get("id")) == self.chat_id and text:
+                            commands.append(text)
+                            
+        except Exception as e:
+            logger.error(f"Telegram polling error: {e}")
+            
+        return commands
 
 class NotificationManager:
     """Manages multiple notification providers."""
@@ -46,3 +78,11 @@ class NotificationManager:
         """Send message to all registered providers."""
         for p in self.providers:
             p.send_message(message)
+
+    def check_commands(self):
+        """Collect commands from all providers."""
+        all_cmds = []
+        for p in self.providers:
+            if hasattr(p, 'check_for_commands'):
+                all_cmds.extend(p.check_for_commands())
+        return all_cmds
