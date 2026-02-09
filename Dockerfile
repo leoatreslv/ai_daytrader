@@ -1,39 +1,46 @@
-# Base Image
-# Use Bullseye to get OpenSSL 1.1.1 for better compatibility with legacy SSL servers
-# (Bookworm/Python 3.12 uses OpenSSL 3.0 which is very strict)
+# Base Image: Python 3.11 Slim (Bullseye for OpenSSL 1.1 compatibility)
 FROM python:3.11-slim-bullseye
 
 # Set Working Directory
 WORKDIR /app
 
-# Install System Dependencies (Minimal)
-# gcc/build-essential might be needed for some python extensions
-# ca-certificates and openssl are needed for SSL/TLS connections
+# 1. System Dependencies
+# - git: for installing from GitHub URLs
+# - build-essential: for compiling extensions (if needed fallback)
+# - ca-certificates/openssl: for secure connections
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
     build-essential \
     ca-certificates \
     openssl \
-    git \
     && rm -rf /var/lib/apt/lists/*
-    
-# Update certificates
+
+# Update CA Certificates to ensure SSL works
 RUN update-ca-certificates
 
-# Copy Requirements
+# 2. Upgrade Python Build Tools
+# Essential for modern pip/setuptools behavior and avoiding pkg_resources errors
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel setuptools-scm
+
+# 3. Heavy Dependencies (Force Binary)
+# Install numpy and pandas specifically as binaries to avoid source compilation
+# This prevents the "Building wheel for pandas failed" error
+RUN pip install --no-cache-dir --only-binary=:all: "numpy<2.0.0" "pandas<3.0.0"
+
+# 4. Install pandas-ta (The Tricky Part)
+# - Install from GitHub development branch (standard release is missing/broken on PyPI)
+# - Use --no-build-isolation to force it to use the pre-installed numpy/pandas
+RUN pip install --no-cache-dir --no-build-isolation "pandas_ta @ https://github.com/twopirllc/pandas-ta/archive/development.zip"
+
+# 5. Runtime Dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Dependencies
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-# Force binary install for pandas/numpy to avoid source build failures (pkg_resources error)
-RUN pip install --no-cache-dir --only-binary=:all: "pandas<3.0.0" "numpy<2.0.0"
-# Use --no-build-isolation to use the system's setuptools/wheel for any source builds
-RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
-
-# Copy Application Code
+# 6. Copy Application Code
 COPY . .
 
-# Set Environment Variables
+# Environment Config
 ENV PYTHONUNBUFFERED=1
 
-# Command to Run
+# Run
 CMD ["python", "main.py"]

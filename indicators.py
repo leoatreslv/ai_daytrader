@@ -1,12 +1,5 @@
 import pandas as pd
-try:
-    import pandas_ta as ta
-except ImportError:
-    try:
-        import pandas_ta_remake as ta
-    except ImportError:
-        # Final fallback/error logging if needed, or let it fail naturally
-        raise ImportError("Could not import pandas_ta or pandas_ta_remake")
+import pandas_ta as ta
 
 class Indicators:
     @staticmethod
