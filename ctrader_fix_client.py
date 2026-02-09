@@ -201,7 +201,12 @@ class CTraderFixClient:
             config.CT_PASSWORD, "TRADE", self
         )
         self.market_data_callbacks = []
+        self.latest_prices = {} # Store latest price by SymbolID
         self.symbol_map = {}
+        
+    def handle_market_data(self, symbol_id, price):
+        # Update internal cache
+        self.latest_prices[str(symbol_id)] = price
         
     def start(self):
         logger.info("Connecting to cTrader FIX...")
@@ -251,7 +256,7 @@ class CTraderFixClient:
             if self.notifier: self.notifier.notify(msg)
 
     def on_disconnected(self, session_type, reason="Unknown"):
-        msg = f"❌ **DISCONNECTED**\nSession: {session_type}\nReason: {reason}"
+        msg = f"[FAILED] **DISCONNECTED**\nSession: {session_type}\nReason: {reason}"
         logger.warning(msg)
         if self.notifier:
             self.notifier.notify(msg)
