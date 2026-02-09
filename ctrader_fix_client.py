@@ -188,14 +188,23 @@ class CTraderFixClient:
         logger.info("Connecting to cTrader FIX...")
         self.quote_session.connect()
         time.sleep(2) 
-        self.trade_session.connect()
         
-        # Wait for logon
-        time.sleep(2)
+        # Retry logic for Trade Session (it tends to be flaky if connected too fast)
+        for i in range(3):
+            self.trade_session.connect()
+            time.sleep(2)
+            if self.trade_session.connected:
+                break
+            logger.warning(f"Trade session failed to connect. Retrying ({i+1}/3)...")
+            time.sleep(3)
+        
+        # Final Status Check
         if self.quote_session.connected and self.trade_session.connected:
-            logger.info("Connected to cTrader.")
+            logger.info("Connected to cTrader (Full).")
+        elif self.quote_session.connected:
+             logger.warning("Connected to cTrader (QUOTE Only). Trade session failed.")
         elif self.trade_session.connected:
-             logger.warning("Connected to cTrader (TRADE Only).")
+             logger.warning("Connected to cTrader (TRADE Only). Quote session failed.")
         else:
             logger.error("Failed to connect to cTrader.")
 
