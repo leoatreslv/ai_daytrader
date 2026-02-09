@@ -43,13 +43,24 @@ class LLMClient:
 
         try:
             logger.debug(f"Sending request to LLM: {self.model}")
-            response = requests.post(f"{self.api_url}/chat/completions", json=payload, timeout=30)
+            response = requests.post(f"{self.api_url}/chat/completions", json=payload, timeout=60)
             if response.status_code == 200:
                 result = response.json()
                 content = result['choices'][0]['message']['content']
-                # clean cleanup if needed
+                import re
+                # Remove <think> blocks
+                content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+                
+                # Cleanup markdown code blocks
                 if "```json" in content:
                     content = content.replace("```json", "").replace("```", "")
+                
+                # Find first { and last }
+                start = content.find('{')
+                end = content.rfind('}')
+                
+                if start != -1 and end != -1:
+                    content = content[start:end+1]
                 
                 parsed_content = json.loads(content)
                 logger.info(f"LLM Response: {parsed_content}")
