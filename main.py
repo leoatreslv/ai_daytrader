@@ -71,6 +71,9 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
                     
                     if active_symbols:
                         sym = active_symbols[0]
+                        # Debug: Print what we are looking for vs what we have
+                        logger.info(f"STATUS DEBUG: Looking for '{sym}' (type: {type(sym)}) in keys: {list(fix_client.latest_prices.keys())}")
+                        
                         price = fix_client.latest_prices.get(sym, "Waiting...")
                         t_check = fix_client.last_price_times.get(sym)
                         t_str = t_check.strftime("%H:%M:%S") if t_check else "N/A"
