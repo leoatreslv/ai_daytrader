@@ -42,6 +42,14 @@
     docker-compose down
     ```
 
+### 5. Telegram Commands
+-   `/start`: Shows the welcome menu.
+-   `/status`: Checks if the bot is connected to cTrader (Quote & Trade).
+-   `/orders`: Lists all currently active (working) orders.
+-   `/positions` (or `/pos`): Lists all open positions with net quantity.
+-   `/symbol <SYMBOL>`: Switches the active trading symbol (e.g., `/symbol EURUSD`).
+-   `/help`: Displays the list of available commands.
+
 ### Troubleshooting
 **Error: `PermissionError: [Errno 13] Permission denied`**
 This happens on Linux if your user doesn't have access to the Docker socket.

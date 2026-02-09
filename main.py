@@ -68,8 +68,14 @@ def listen_for_commands(notifier, fix_client):
                     notifier.notify(f"ℹ️ **STATUS**\nActive Symbol: {active_symbols}\nConnected: {fix_client.quote_session.connected}")
                 
                 elif cmd == "/help":
-                    notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
+                    notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/orders` - List active orders\n`/positions` - List open positions\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
                 
+                elif cmd == "/orders":
+                    notifier.notify(fix_client.get_orders_string())
+
+                elif cmd in ["/positions", "/pos"]:
+                    notifier.notify(fix_client.get_positions_string())
+
                 else:
                     notifier.notify(f"❓ **UNKNOWN COMMAND**\nI didn't understand `{cmd}`.\nTry `/help`.")
 
