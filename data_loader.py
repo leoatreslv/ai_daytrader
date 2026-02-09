@@ -11,11 +11,15 @@ class DataLoader:
         self.client.market_data_callbacks.append(self.on_tick)
 
     def on_tick(self, symbol_id, price):
+        if isinstance(symbol_id, bytes):
+            symbol_id = symbol_id.decode()
+            
         now = datetime.now()
         if symbol_id not in self.ticks:
             self.ticks[symbol_id] = []
         
         self.ticks[symbol_id].append({'time': now, 'price': price})
+        # logger.debug(f"[{now.strftime('%H:%M:%S')}] Tick: {symbol_id} @ {price}")
         print(f"[{now.strftime('%H:%M:%S')}] Tick: {symbol_id} @ {price}")
         
         # Simple aggregation: If > 60 ticks or > 1 min, make a bar (Simulated)
