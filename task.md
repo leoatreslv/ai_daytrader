@@ -1,0 +1,54 @@
+
+- [x] Run `test_socket.py` to verify basic connectivity
+- [x] Check `main.py` for `CTraderFixClient` integration
+- [x] Run `main.py` or create a test script for `CTraderFixClient`
+- [x] Verify Market Data subscription
+- [x] Verify Order Submission
+- [x] Implement LLM Bias in `strategy.py`
+    - [x] Implement `update_llm_bias`
+    - [x] Update `check_signal` with bias logic
+- [x] Verify LLM Bias integration
+- [x] Implement Common Logging
+    - [x] Create `logger.py`
+    - [x] Integrate logger into `llm_client.py`
+    - [x] Integrate logger into `strategy.py`
+    - [x] Integrate logger into `ctrader_fix_client.py`
+    - [x] Integrate logger into `main.py`
+- [x] Improve Termination Logic
+    - [x] Refactor `main.py` to use interruptible sleep
+    - [x] Create `stop.txt` to force stop existing process
+- [x] Linux Portability (Docker)
+    - [x] Create `Dockerfile`
+    - [x] Create `docker-compose.yml`
+    - [x] Add `.dockerignore`
+- [x] Push to GitHub
+    - [x] Initialize Git
+    - [x] Create `.gitignore`
+    - [x] Commit and Push
+- [x] Fix Docker Logging
+    - [x] Redirect logs to `logs/` directory
+    - [x] Fix `docker-compose.yml` volume mount
+    - [x] Push updates to GitHub
+- [x] Fix Docker SSL Connection
+    - [x] Install `ca-certificates` and `openssl` in Dockerfile
+    - [x] Update certificates
+    - [x] Relax SSL Context (SECLEVEL=1)
+    - [x] Push updates to GitHub
+- [x] Fix Docker SSL (Legacy Image)
+    - [x] Switch Dockerfile to `python:3.11-slim-bullseye`
+    - [x] Push updates to GitHub
+- [x] Fix Docker Dependencies (Pandas TA)
+    - [x] Add `git` to Dockerfile
+    - [x] Update `requirements.txt` for git install
+    - [x] Update `requirements.txt` for zip install (Correct URL)
+    - [x] Switch to `pandas-ta-remake` (Repo Gone)
+    - [x] Upgrade `setuptools` and `wheel` in Dockerfile
+    - [x] Force binary install for `pandas`/`numpy` in Dockerfile
+    - [x] Disable build isolation in Dockerfile
+    - [x] Remove conflicting `pandas`/`numpy` from requirements.txt
+    - [x] Revert to standard `pandas_ta` (Fix Import Error)
+    - [x] Switch back to `pandas-ta-remake` + Robust Import
+    - [x] Push updates to GitHub
+- [x] Fix Docker Runtime Error (pkg_resources)
+    - [x] Add `setuptools` to `requirements.txt`
+    - [x] Push updates to GitHub
