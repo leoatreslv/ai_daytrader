@@ -23,6 +23,7 @@ RUN update-ca-certificates
 COPY requirements.txt .
 
 # Install Dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy Application Code
