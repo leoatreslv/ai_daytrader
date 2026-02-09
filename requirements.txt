@@ -1,6 +1,6 @@
 simplefix
 pandas<3.0.0
-pandas_ta @ https://github.com/twopirllc/pandas-ta/archive/development.zip
+pandas-ta-remake
 numpy<2.0.0
 scikit-learn
 python-dotenv
