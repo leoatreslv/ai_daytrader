@@ -2,10 +2,17 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-def setup_logger(name, log_file="trading_system.log", level=logging.INFO):
+import os
+
+def setup_logger(name, log_file="logs/trading_system.log", level=logging.INFO):
     """
     Setup a logger that writes to a file and the console.
     """
+    # Ensure log directory exists
+    log_dir = os.path.dirname(log_file)
+    if log_dir and not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
