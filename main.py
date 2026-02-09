@@ -188,15 +188,31 @@ def main():
                     running = False
                     break
                 
-                # Market Close Check
+                # Market Hours Check
                 now = datetime.now()
-                if now.hour == config.MARKET_CLOSE_HOUR and now.minute >= config.MARKET_CLOSE_MINUTE:
-                    logger.warning("Market Close Reached. Closing all positions and stopping.")
-                    notifier.notify("🛑 **MARKET CLOSE REACHED**\nStopping bot and closing positions.")
-                    fix_client.close_all_positions()
-                    running = False
-                    break
+                market_open = now.replace(hour=config.MARKET_OPEN_HOUR, minute=config.MARKET_OPEN_MINUTE, second=0, microsecond=0)
+                market_close = now.replace(hour=config.MARKET_CLOSE_HOUR, minute=config.MARKET_CLOSE_MINUTE, second=0, microsecond=0)
                 
+                is_open = market_open <= now < market_close
+                
+                if not is_open:
+                    if active_symbols: # If we have active symbols or open positions, we might need to close/pause
+                         # Check if we just crossed the close time (e.g. within last minute)
+                         # Simple logic: If outside hours and positions > 0 -> Close positions
+                         if fix_client.positions:
+                             logger.warning("Outside Trading Hours. Closing all positions.")
+                             notifier.notify("🛑 **MARKET CLOSE**\nClosing positions and pausing trading.")
+                             fix_client.close_all_positions()
+                    
+                    # Pause Logic
+                    logger.info(f"Market Closed. Waiting for Open ({config.MARKET_OPEN_HOUR}:{config.MARKET_OPEN_MINUTE:02d})...")
+                    if smart_sleep(60): # Check stop every 60s
+                        running = False
+                        break
+                    continue # Skip strategy loop
+                
+                # --- Trading Logic (Only runs if is_open) ---
+
                 # Periodic Chart Check (Default 2 Hours = 7200s, Configurable)
                 if time.time() - last_chart_time > config.CHART_INTERVAL:
                     last_chart_time = time.time()

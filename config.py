@@ -28,6 +28,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Trading Parameters
 # Trading Parameters
+MARKET_OPEN_HOUR = int(os.getenv("MARKET_OPEN_HOUR", "9")) # 9 AM
+MARKET_OPEN_MINUTE = int(os.getenv("MARKET_OPEN_MINUTE", "30")) # 30 Min
 MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", "15")) # 3 PM
 MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", "50")) # 50 Min
 TARGET_SYMBOLS = ["41"] # XAUUSD (ID 41)
