@@ -17,6 +17,24 @@ class TelegramProvider(NotificationProvider):
         self.chat_id = str(chat_id)
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         self.last_update_id = 0
+        self.set_bot_commands()
+
+    def set_bot_commands(self):
+        """Registers commands with Telegram Bot API for the menu."""
+        if not self.token: return
+        
+        commands = [
+            {"command": "status", "description": "Check connection & active symbol"},
+            {"command": "symbol", "description": "Switch instrument (e.g. /symbol 1)"}
+        ]
+        try:
+            response = requests.post(f"{self.base_url}/setMyCommands", json={"commands": commands}, timeout=5)
+            if response.status_code == 200:
+                logger.info("Telegram commands registered successfully.")
+            else:
+                logger.warning(f"Failed to register Telegram commands: {response.text}")
+        except Exception as e:
+            logger.error(f"Error registering Telegram commands: {e}")
 
     def send_message(self, message: str):
         if not self.token or not self.chat_id:
