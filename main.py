@@ -25,6 +25,12 @@ def listen_for_commands(notifier, fix_client):
         try:
             cmds = notifier.check_commands()
             for cmd in cmds:
+                # Handle Telegram group syntax (e.g., /status@my_bot -> /status)
+                if "@" in cmd:
+                    cmd_parts = cmd.split()
+                    cmd_parts[0] = cmd_parts[0].split('@')[0]
+                    cmd = " ".join(cmd_parts)
+                
                 if cmd.startswith("/symbol"):
                     # Format: /symbol 1
                     try:
