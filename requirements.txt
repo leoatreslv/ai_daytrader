@@ -1,7 +1,5 @@
 simplefix
-pandas<3.0.0
 pandas-ta-remake
-numpy<2.0.0
 scikit-learn
 python-dotenv
 requests
