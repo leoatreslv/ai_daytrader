@@ -107,6 +107,13 @@ class FixSession:
         msg.append_pair(554, self.password)
         msg.append_pair(141, "Y") # ResetSeqNum (Clean session for demo)
         
+        # Debug Log (Mask Password)
+        try:
+            debug_msg = msg.encode().replace(self.password.encode(), b"******")
+            logger.info(f"[{self.sender_sub_id}] Sending Logon: {debug_msg}")
+        except:
+             logger.info(f"[{self.sender_sub_id}] Sending Logon (encoding failed to log)")
+        
         self._send_raw(msg)
 
     def send_heartbeat(self):
