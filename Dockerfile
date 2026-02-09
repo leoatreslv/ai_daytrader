@@ -1,5 +1,7 @@
 # Base Image
-FROM python:3.12-slim
+# Use Bullseye to get OpenSSL 1.1.1 for better compatibility with legacy SSL servers
+# (Bookworm/Python 3.12 uses OpenSSL 3.0 which is very strict)
+FROM python:3.11-slim-bullseye
 
 # Set Working Directory
 WORKDIR /app
