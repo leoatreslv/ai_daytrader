@@ -69,6 +69,12 @@ This happens because newer Linux/Python versions (OpenSSL 3.0+) are too strict f
 *   **Fix Implemented**: We switched the Docker image to `python:3.11-slim-bullseye` (OpenSSL 1.1) and relaxed SSL security levels in `ctrader_fix_client.py`.
 *   **Action**: Ensure you pull the latest code and rebuild: `docker-compose up -d --build`
 
+**Error: `[QUOTE] Read error: 56` (Immediate Disconnect)**
+If SSL connects but immediately disconnects with "Read error: 56", the server likely rejected the Logon message.
+*   **Cause**: Sending `TargetSubID` (Tag 57) when the server doesn't expect it.
+*   **Fix Implemented**: Removed Tag 57 from `ctrader_fix_client.py`.
+*   **Action**: Rebuild: `docker-compose up -d --build`
+
 **Error: `ModuleNotFoundError: No module named 'pkg_resources'`**
 Occurs during build or runtime because `setuptools` is missing in modern Python environments.
 *   **Fix Implemented**:
