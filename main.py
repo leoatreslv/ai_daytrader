@@ -14,17 +14,17 @@ logger = setup_logger("Main")
 def main():
     logger.info("Starting AI Day Trader (cTrader FIX)...")
     
-    # Initialize Clients
-    # Strategy would need updates to handle integer symbol IDs, but logic remains
-    fix_client = CTraderFixClient(notifier=notifier)
-    llm = LLMClient()
-    loader = DataLoader(fix_client)
-    
     # Initialize Notifications
     notifier = NotificationManager()
     if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
         notifier.add_provider(TelegramProvider(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
         logger.info("Telegram notifications enabled.")
+    
+    # Initialize Clients
+    # Strategy would need updates to handle integer symbol IDs, but logic remains
+    fix_client = CTraderFixClient(notifier=notifier)
+    llm = LLMClient()
+    loader = DataLoader(fix_client)
     
     # Strategy would need updates to handle integer symbol IDs, but logic remains
     strategy = Strategy(fix_client, llm) 
