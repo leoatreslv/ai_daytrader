@@ -79,7 +79,7 @@ def listen_for_commands(notifier, fix_client):
             time.sleep(5)
 
 def main():
-    global running
+    global active_symbols, running
     logger.info("Starting AI Day Trader (cTrader FIX)...")
     
     # Initialize Notifications
@@ -96,111 +96,118 @@ def main():
     # Strategy
     strategy = Strategy(fix_client, llm) 
     
-    # Start Connection
-    fix_client.start()
-    
-    # Fetch all symbols (Name -> ID)
-    fix_client.fetch_symbols()
+    try:
+        # Start Connection
+        fix_client.start()
+        
+        # Fetch all symbols (Name -> ID)
+        fix_client.fetch_symbols()
 
-    # Initial Subscription
-    # Resolve initial symbols if they are names
-    initial_ids = []
-    for s in active_symbols:
-        res_id = fix_client.get_symbol_id(s)
-        if res_id:
-            logger.info(f"Resolved {s} -> {res_id}")
-            initial_ids.append(res_id)
-        else:
-             # Assume it's already an ID if not found, or user config error
-             logger.warning(f"Could not resolve {s}, assuming it's an ID.")
-             initial_ids.append(s)
-             
-    active_symbols = initial_ids
+        # Initial Subscription
+        # Resolve initial symbols if they are names
+        initial_ids = []
+        for s in active_symbols:
+            res_id = fix_client.get_symbol_id(s)
+            if res_id:
+                logger.info(f"Resolved {s} -> {res_id}")
+                initial_ids.append(res_id)
+            else:
+                 # Assume it's already an ID if not found, or user config error
+                 logger.warning(f"Could not resolve {s}, assuming it's an ID.")
+                 initial_ids.append(s)
+                 
+        active_symbols = initial_ids
 
-    for symbol in active_symbols:
-        logger.info(f"Subscribing to {symbol}...")
-        fix_client.subscribe_market_data(symbol, f"req_{symbol}")
-    
-    # Start Command Listener
-    import threading
-    cmd_thread = threading.Thread(target=listen_for_commands, args=(notifier, fix_client), daemon=True)
-    cmd_thread.start()
-    
-    logger.info("Entering Main Loop...")
-    while True:
-        try:
-            # Check Stop
-            if check_stop():
-                running = False
-                break
+        for symbol in active_symbols:
+            logger.info(f"Subscribing to {symbol}...")
+            fix_client.subscribe_market_data(symbol, f"req_{symbol}")
+        
+        # Start Command Listener
+        import threading
+        cmd_thread = threading.Thread(target=listen_for_commands, args=(notifier, fix_client), daemon=True)
+        cmd_thread.start()
+        
+        logger.info("Entering Main Loop...")
+        while running:
+            try:
+                # Check Stop
+                if check_stop():
+                    running = False
+                    break
 
-            # Main strategy loop
-            # Use copy of active_symbols to handle dynamic changes safely
-            current_targets = list(active_symbols)
-            
-            for symbol in current_targets:
-                df = loader.get_latest_bars(symbol)
-                if df is not None and len(df) > 20:
-                     # Run Strategy
-                     signal = strategy.check_signal(df)
-                     if signal:
-                         msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol}\nAction: {signal['action']}\nReason: {signal['reason']}"
-                         logger.info(msg)
-                         notifier.notify(msg)
-                         
-                         # Determine Side
-                         if signal['action'] == 'BUY_CALL':
-                             side = '1' # Buy
-                             opp_side = '2' # Sell
-                             bias = 1
-                         else:
-                             side = '2' # Sell
-                             opp_side = '1' # Buy
-                             bias = -1
-                         
-                         # Execute Entry (Market)
-                         # Use timestamp for unique ClOrdID to avoid duplicates
-                         fix_client.submit_order(symbol, config.TRADE_QTY, side, order_type='1')
-                         
-                         entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol}"
-                         logger.info(entry_msg)
-                         notifier.notify(entry_msg)
-                         
-                         # Calculate Risk
-                         current_price = df.iloc[-1]['close']
-                         stop_dist = current_price * config.STOP_LOSS_PCT
-                         tp_dist = current_price * config.TAKE_PROFIT_PCT
-                         
-                         if side == '1': # Long
-                             sl_price = current_price - stop_dist
-                             tp_price = current_price + tp_dist
-                         else: # Short
-                             sl_price = current_price + stop_dist
-                             tp_price = current_price - tp_dist
+                # Main strategy loop
+                # Use copy of active_symbols to handle dynamic changes safely
+                current_targets = list(active_symbols)
+                
+                for symbol in current_targets:
+                    df = loader.get_latest_bars(symbol)
+                    if df is not None and len(df) > 20:
+                         # Run Strategy
+                         signal = strategy.check_signal(df)
+                         if signal:
+                             msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol}\nAction: {signal['action']}\nReason: {signal['reason']}"
+                             logger.info(msg)
+                             notifier.notify(msg)
                              
-                         # Protection
-                         fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='3', stop_px=f"{sl_price:.5f}")
-                         fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='2', price=f"{tp_price:.5f}")
-                         
-                         notifier.notify(f"🛡️ **PROTECTION PLACED**\nSL: {sl_price:.5f}\nTP: {tp_price:.5f}")
-                         
-                         if smart_sleep(60):
-                             running = False
-                             break
-            
-            if smart_sleep(1):
-                running = False
-                break
+                             # Determine Side
+                             if signal['action'] == 'BUY_CALL':
+                                 side = '1' # Buy
+                                 opp_side = '2' # Sell
+                                 bias = 1
+                             else:
+                                 side = '2' # Sell
+                                 opp_side = '1' # Buy
+                                 bias = -1
+                             
+                             # Execute Entry (Market)
+                             # Use timestamp for unique ClOrdID to avoid duplicates
+                             fix_client.submit_order(symbol, config.TRADE_QTY, side, order_type='1')
+                             
+                             entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol}"
+                             logger.info(entry_msg)
+                             notifier.notify(entry_msg)
+                             
+                             # Calculate Risk
+                             current_price = df.iloc[-1]['close']
+                             stop_dist = current_price * config.STOP_LOSS_PCT
+                             tp_dist = current_price * config.TAKE_PROFIT_PCT
+                             
+                             if side == '1': # Long
+                                 sl_price = current_price - stop_dist
+                                 tp_price = current_price + tp_dist
+                             else: # Short
+                                 sl_price = current_price + stop_dist
+                                 tp_price = current_price - tp_dist
+                                 
+                             # Protection
+                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='3', stop_px=f"{sl_price:.5f}")
+                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='2', price=f"{tp_price:.5f}")
+                             
+                             notifier.notify(f"🛡️ **PROTECTION PLACED**\nSL: {sl_price:.5f}\nTP: {tp_price:.5f}")
+                             
+                             if smart_sleep(60):
+                                 running = False
+                                 break
+                
+                if smart_sleep(1):
+                    running = False
+                    break
 
-        except KeyboardInterrupt:
-            logger.info("Stopping...")
-            running = False
-            break
-        except Exception as e:
-            logger.error(f"Error: {e}")
-            if smart_sleep(1):
+            except KeyboardInterrupt:
+                logger.info("Stopping...")
                 running = False
                 break
+            except Exception as e:
+                logger.error(f"Error in Main Loop: {e}")
+                # Don't break, just sleep and retry
+                if smart_sleep(5):
+                    running = False
+                    break
+
+    except Exception as e:
+        logger.critical(f"Fatal Startup Error: {e}")
+        notifier.notify(f"❌ **FATAL ERROR**\nBot crashed:\n{e}")
+        time.sleep(10) # Wait before exit to allow notification to send
 
 
 def check_stop():
