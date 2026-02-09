@@ -77,7 +77,8 @@ def listen_for_commands(notifier, fix_client):
                     notifier.notify(fix_client.get_positions_string())
 
                 elif cmd == "/sync":
-                    notifier.notify("🔄 **SYNCING STATE**\nRequesting Orders & Positions from cTrader...")
+                    notifier.notify("🔄 **SYNCING STATE**\nClearing local cache & Requesting fresh data...")
+                    fix_client.clear_state()
                     fix_client.send_order_mass_status_request()
                     fix_client.send_positions_request()
 

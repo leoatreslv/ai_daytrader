@@ -373,11 +373,22 @@ class CTraderFixClient:
                 if net != 0:
                     self.positions[sym] = net
                     # logger.info(f"Restored Position: {sym} = {net}")
+                else:
+                    # Explicitly remove if net is 0 (closed)
+                    if sym in self.positions:
+                        del self.positions[sym]
+                        
             except Exception as e:
                 logger.error(f"Error parsing Position Report: {e}")
 
         else:
             logger.debug(f"[{source}] Unknown MsgType: {msg_type}")
+
+    def clear_state(self):
+        """Clear internal state (Orders/Positions) before a sync."""
+        self.open_orders.clear()
+        self.positions.clear()
+        logger.info("Internal state cleared.")
 
     def send_order_mass_status_request(self):
         """Request status of all active orders."""
