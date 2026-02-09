@@ -1,0 +1,15 @@
+services:
+  ai_trader:
+    build: .
+    image: ai_daytrader:latest
+    container_name: ai_daytrader
+    restart: unless-stopped
+    volumes:
+      - ./.env:/app/.env                 # Mount secrets
+      - ./logs:/app/logs                 # Persist logs (if main.py writes to logs/ dir, currently writes to root)
+      - ./trading_system.log:/app/trading_system.log # Mount single log file if not using a dir
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Interactive mode to allow stopping with Ctrl+C easily if running attached
+    stdin_open: true 
+    tty: true

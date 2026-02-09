@@ -1,0 +1,8 @@
+simplefix
+pandas
+pandas_ta
+numpy
+scikit-learn
+python-dotenv
+requests
+openai
