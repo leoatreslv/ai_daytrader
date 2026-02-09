@@ -30,7 +30,7 @@ RUN pip install --no-cache-dir --only-binary=:all: "numpy<2.0.0" "pandas<3.0.0"
 # 4. Install pandas-ta (Fork)
 # Original twopirllc/pandas-ta is 404. Using active community fork pandas-ta-classic.
 # Use --no-build-isolation to force usage of pre-installed numpy/pandas.
-RUN pip install --no-cache-dir --no-build-isolation "pandas_ta @ https://github.com/xgboosted/pandas-ta-classic/archive/main.zip"
+RUN pip install --no-cache-dir --no-build-isolation "pandas-ta-classic @ https://github.com/xgboosted/pandas-ta-classic/archive/main.zip"
 
 # 5. Runtime Dependencies
 COPY requirements.txt .
