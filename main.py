@@ -102,7 +102,13 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
                     if sym:
                         notifier.notify(f"📊 Generating chart for {sym}...")
                         df = loader.get_latest_bars(sym, length=100)
-                        if df is not None and len(df) >= 2:
+                        
+                        if df is not None:
+                            logger.info(f"Chart Request: Retrieved {len(df)} bars for {sym}")
+                        else:
+                             logger.info(f"Chart Request: No bars for {sym}")
+
+                        if df is not None and len(df) >= 1:
                             fpath = generate_candlestick_chart(df, sym)
                             if fpath:
                                 notifier.notify_image(fpath, f"Chart: {sym}")
