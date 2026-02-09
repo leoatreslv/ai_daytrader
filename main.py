@@ -48,8 +48,14 @@ def listen_for_commands(notifier, fix_client):
                         logger.error(f"Command processing error: {e}")
                         notifier.notify(f"❌ Error processing command: {e}")
                 
-                elif cmd == "/status":
+                elif cmd == "/status" or cmd == "/statis": # Handle typo
                     notifier.notify(f"ℹ️ **STATUS**\nActive Symbol: {active_symbols}\nConnected: {fix_client.quote_session.connected}")
+                
+                elif cmd == "/help":
+                    notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
+                
+                else:
+                    notifier.notify(f"❓ **UNKNOWN COMMAND**\nI didn't understand `{cmd}`.\nTry `/help`.")
 
             time.sleep(2) # Poll interval
         except Exception as e:
