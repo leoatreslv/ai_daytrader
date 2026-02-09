@@ -81,6 +81,10 @@ def listen_for_commands(notifier, fix_client):
                     fix_client.clear_state()
                     fix_client.send_order_mass_status_request()
                     fix_client.send_positions_request()
+                    
+                    # Give it a moment to populate, then confirm
+                    time.sleep(3) 
+                    notifier.notify(f"✅ **SYNC COMPLETE**\n\n{fix_client.get_orders_string()}\n\n{fix_client.get_positions_string()}")
 
                 else:
                     notifier.notify(f"❓ **UNKNOWN COMMAND**\nI didn't understand `{cmd}`.\nTry `/help`.")
