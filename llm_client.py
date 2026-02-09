@@ -59,4 +59,6 @@ class LLMClient:
                 return None
         except Exception as e:
             logger.error(f"LLM Request Failed: {e}")
+            if 'response' in locals():
+                logger.error(f"Raw Response: {response.text}")
             return None
