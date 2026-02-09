@@ -1,5 +1,5 @@
 simplefix
-pandas-ta-remake
+pandas_ta
 scikit-learn
 python-dotenv
 requests
