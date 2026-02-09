@@ -15,7 +15,8 @@ def main():
     logger.info("Starting AI Day Trader (cTrader FIX)...")
     
     # Initialize Clients
-    fix_client = CTraderFixClient()
+    # Strategy would need updates to handle integer symbol IDs, but logic remains
+    fix_client = CTraderFixClient(notifier=notifier)
     llm = LLMClient()
     loader = DataLoader(fix_client)
     

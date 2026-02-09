@@ -148,9 +148,14 @@ class FixSession:
                 continue # Just loop
             except Exception as e:
                 logger.error(f"[{self.sender_sub_id}] Read error: {e}")
+                self.app.on_disconnected(self.sender_sub_id, f"Read Error: {e}")
                 break
         
-        logger.info(f"[{self.sender_sub_id}] Disconnected.")
+        if self.connected: # If we were connected and loop broke
+             logger.info(f"[{self.sender_sub_id}] Disconnected.")
+             if self.running: # Unexpected disconnect
+                 self.app.on_disconnected(self.sender_sub_id, "Connection Reset/Closed")
+        
         self.connected = False
 
     def handle_message(self, msg):
@@ -171,7 +176,8 @@ class FixSession:
         self.app.on_message(self.sender_sub_id, msg)
 
 class CTraderFixClient:
-    def __init__(self,):
+    def __init__(self, notifier=None):
+        self.notifier = notifier
         self.quote_session = FixSession(
             config.CT_HOST, config.CT_QUOTE_PORT,
             config.CT_SENDER_COMP_ID, config.CT_TARGET_COMP_ID,
@@ -186,12 +192,18 @@ class CTraderFixClient:
         
     def start(self):
         logger.info("Connecting to cTrader FIX...")
-        self.quote_session.connect()
+        try:
+            self.quote_session.connect()
+        except:
+             pass 
         time.sleep(2) 
         
         # Retry logic for Trade Session (it tends to be flaky if connected too fast)
         for i in range(3):
-            self.trade_session.connect()
+            try:
+                self.trade_session.connect()
+            except:
+                pass
             time.sleep(2)
             if self.trade_session.connected:
                 break
@@ -201,12 +213,26 @@ class CTraderFixClient:
         # Final Status Check
         if self.quote_session.connected and self.trade_session.connected:
             logger.info("Connected to cTrader (Full).")
+            if self.notifier:
+                self.notifier.notify("✅ **SYSTEM STARTED**\nConnected to cTrader (Full).")
         elif self.quote_session.connected:
-             logger.warning("Connected to cTrader (QUOTE Only). Trade session failed.")
+             msg = "⚠️ **PARTIAL CONNECTION**\nConnected to QUOTE Only. Trade session failed."
+             logger.warning(msg)
+             if self.notifier: self.notifier.notify(msg)
         elif self.trade_session.connected:
-             logger.warning("Connected to cTrader (TRADE Only). Quote session failed.")
+             msg = "⚠️ **PARTIAL CONNECTION**\nConnected to TRADE Only. Quote session failed."
+             logger.warning(msg)
+             if self.notifier: self.notifier.notify(msg)
         else:
-            logger.error("Failed to connect to cTrader.")
+            msg = "❌ **CONNECTION FAILED**\nCould not connect to cTrader."
+            logger.error(msg)
+            if self.notifier: self.notifier.notify(msg)
+
+    def on_disconnected(self, session_type, reason="Unknown"):
+        msg = f"❌ **DISCONNECTED**\nSession: {session_type}\nReason: {reason}"
+        logger.warning(msg)
+        if self.notifier:
+            self.notifier.notify(msg)
 
     def on_message(self, source, msg):
         msg_type = msg.get(35)
