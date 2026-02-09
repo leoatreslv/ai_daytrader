@@ -25,7 +25,11 @@ class TelegramProvider(NotificationProvider):
         
         commands = [
             {"command": "status", "description": "Check connection & active symbol"},
-            {"command": "symbol", "description": "Switch instrument (e.g. /symbol 1)"}
+            {"command": "orders", "description": "List active orders"},
+            {"command": "positions", "description": "List open positions"},
+            {"command": "sync", "description": "Fetch active Orders/Positions from server"},
+            {"command": "symbol", "description": "Switch instrument (e.g. /symbol 1)"},
+            {"command": "help", "description": "Show available commands"}
         ]
         try:
             response = requests.post(f"{self.base_url}/setMyCommands", json={"commands": commands}, timeout=5)

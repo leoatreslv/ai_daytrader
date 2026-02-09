@@ -76,6 +76,11 @@ def listen_for_commands(notifier, fix_client):
                 elif cmd in ["/positions", "/pos"]:
                     notifier.notify(fix_client.get_positions_string())
 
+                elif cmd == "/sync":
+                    notifier.notify("🔄 **SYNCING STATE**\nRequesting Orders & Positions from cTrader...")
+                    fix_client.send_order_mass_status_request()
+                    fix_client.send_positions_request()
+
                 else:
                     notifier.notify(f"❓ **UNKNOWN COMMAND**\nI didn't understand `{cmd}`.\nTry `/help`.")
 

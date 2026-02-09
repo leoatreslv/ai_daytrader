@@ -348,8 +348,53 @@ class CTraderFixClient:
                 logger.warning(msg_text)
                 if self.notifier: self.notifier.notify(msg_text)
                 
+            elif exec_type == b'4': # Canceled
+                if order_id in self.open_orders:
+                    del self.open_orders[order_id]
+                    logger.info(f"Order {order_id} Canceled.")
+            
+            elif exec_type == b'I': # Order Status (Response to Mass Status)
+                # If active, add to tracking
+                if ord_status not in [b'2', b'8', b'4']: # Not Filled/Rejected/Canceled
+                     self.open_orders[order_id] = {
+                        "symbol": symbol, "side": side_str, "qty": qty, "price": price
+                    }
+                     # logger.info(f"Restored Active Order: {symbol} {side_str} {qty}")
+
+        elif msg_type == b'AP': # Position Report
+            # cTrader sends Position Report with Long/Short Qty
+            try:
+                sym = msg.get(55).decode() if msg.get(55) else "Unknown"
+                long_qty = float(msg.get(704).decode()) if msg.get(704) else 0.0
+                short_qty = float(msg.get(705).decode()) if msg.get(705) else 0.0
+                
+                net = long_qty - short_qty
+                if net != 0:
+                    self.positions[sym] = net
+                    # logger.info(f"Restored Position: {sym} = {net}")
+            except Exception as e:
+                logger.error(f"Error parsing Position Report: {e}")
+
         else:
             logger.debug(f"[{source}] Unknown MsgType: {msg_type}")
+
+    def send_order_mass_status_request(self):
+        """Request status of all active orders."""
+        logger.info("Sending Order Mass Status Request...")
+        msg = simplefix.FixMessage()
+        self.trade_session._add_header(msg, "AF")
+        msg.append_pair(584, f"mass{int(time.time())}") # MassStatusReqID
+        msg.append_pair(585, "7") # 7 = Status for all orders
+        self.trade_session._send_raw(msg)
+
+    def send_positions_request(self):
+        """Request all open positions."""
+        logger.info("Sending Position Request...")
+        msg = simplefix.FixMessage()
+        self.trade_session._add_header(msg, "AN")
+        msg.append_pair(710, f"pos{int(time.time())}") # PosReqID
+        # RequestForPositions handling varies, trying minimal valid request
+        self.trade_session._send_raw(msg)
 
     def send_security_list_request(self):
         """Request list of all symbols to build the map."""
