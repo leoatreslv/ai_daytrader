@@ -75,6 +75,20 @@ If SSL connects but immediately disconnects with "Read error: 56", the server li
 *   **Fix Implemented**: Removed Tag 57 from `ctrader_fix_client.py`.
 *   **Action**: Rebuild: `docker-compose up -d --build`
 
+**Error: `ValueError: MISSING CONFIG` or `Encoding failed`**
+This means the application cannot find your credentials.
+1.  **Check if `.env` is a directory**: Run `ls -ld .env`. If it starts with `d`, it's a directory (WRONG).
+2.  **Fix**:
+    ```bash
+    rm -rf .env            # Remove the directory
+    nano .env              # Create the file
+    # Paste:
+    # CT_SENDER_COMP_ID=your_id
+    # CT_PASSWORD=your_password
+    # Save (Ctrl+O, Enter) and Exit (Ctrl+X)
+    ```
+3.  **Rebuild**: `docker-compose up -d --build`
+
 **Error: `ModuleNotFoundError: No module named 'pkg_resources'`**
 Occurs during build or runtime because `setuptools` is missing in modern Python environments.
 *   **Fix Implemented**:
