@@ -10,6 +10,10 @@ class NotificationProvider(ABC):
     def send_message(self, message: str):
         pass
 
+    @abstractmethod
+    def send_image(self, image_path: str, caption: str = ""):
+        pass
+
 class TelegramProvider(NotificationProvider):
     """Sends notifications via Telegram Bot API."""
     def __init__(self, token: str, chat_id: str):
@@ -28,6 +32,7 @@ class TelegramProvider(NotificationProvider):
             {"command": "orders", "description": "List active orders"},
             {"command": "positions", "description": "List open positions"},
             {"command": "sync", "description": "Fetch active Orders/Positions from server"},
+            {"command": "chart", "description": "Generate price chart"},
             {"command": "symbol", "description": "Switch instrument (e.g. /symbol 1)"},
             {"command": "help", "description": "Show available commands"}
         ]
@@ -56,6 +61,21 @@ class TelegramProvider(NotificationProvider):
                 logger.error(f"Telegram send failed: {response.text}")
         except Exception as e:
             logger.error(f"Telegram connection error: {e}")
+
+    def send_image(self, image_path: str, caption: str = ""):
+        if not self.token or not self.chat_id:
+            return
+
+        try:
+            with open(image_path, 'rb') as photo:
+                payload = {"chat_id": self.chat_id, "caption": caption}
+                files = {"photo": photo}
+                response = requests.post(f"{self.base_url}/sendPhoto", data=payload, files=files, timeout=10)
+                
+                if response.status_code != 200:
+                    logger.error(f"Telegram send photo failed: {response.text}")
+        except Exception as e:
+            logger.error(f"Telegram photo error: {e}")
 
     def check_for_commands(self):
         """Polls for new commands from the authorized chat_id."""
@@ -100,6 +120,11 @@ class NotificationManager:
         """Send message to all registered providers."""
         for p in self.providers:
             p.send_message(message)
+
+    def notify_image(self, image_path: str, caption: str = ""):
+        """Send image to all registered providers."""
+        for p in self.providers:
+            p.send_image(image_path, caption)
 
     def check_commands(self):
         """Collect commands from all providers."""

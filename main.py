@@ -7,15 +7,16 @@ from llm_client import LLMClient
 from datetime import datetime
 from logger import setup_logger
 
-from notification import NotificationManager, TelegramProvider
+from charting import generate_candlestick_chart
 
 logger = setup_logger("Main")
 
 # Shared state for dynamic control
 active_symbols = list(config.TARGET_SYMBOLS)
 running = True
+last_chart_time = time.time()
 
-def listen_for_commands(notifier, fix_client):
+def listen_for_commands(notifier, fix_client, loader): # Added loader to args
     """Background thread to listen for Telegram commands."""
     global active_symbols, running
     
@@ -68,7 +69,7 @@ def listen_for_commands(notifier, fix_client):
                     notifier.notify(f"ℹ️ **STATUS**\nActive Symbol: {active_symbols}\nConnected: {fix_client.quote_session.connected}")
                 
                 elif cmd == "/help":
-                    notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/orders` - List active orders\n`/positions` - List open positions\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
+                    notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/orders` - List active orders\n`/positions` - List open positions\n`/sync` - Manual State Sync\n`/chart` - Generate Price Chart\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
                 
                 elif cmd == "/orders":
                     notifier.notify(fix_client.get_orders_string())
@@ -86,8 +87,24 @@ def listen_for_commands(notifier, fix_client):
                     time.sleep(3) 
                     notifier.notify(f"✅ **SYNC COMPLETE**\n\n{fix_client.get_orders_string()}\n\n{fix_client.get_positions_string()}")
 
+                elif cmd == "/chart":
+                    sym = active_symbols[0] if active_symbols else None
+                    if sym:
+                        notifier.notify(f"📊 Generating chart for {sym}...")
+                        df = loader.get_latest_bars(sym, length=100)
+                        if df is not None and len(df) > 10:
+                            fpath = generate_candlestick_chart(df, sym)
+                            if fpath:
+                                notifier.notify_image(fpath, f"Chart: {sym}")
+                            else:
+                                notifier.notify("❌ Failed to generate chart (File error).")
+                        else:
+                             notifier.notify("⚠️ Not enough data for chart.")
+                    else:
+                        notifier.notify("⚠️ No active symbol.")
+
                 else:
-                    notifier.notify(f"❓ **UNKNOWN COMMAND**\nI didn't understand `{cmd}`.\nTry `/help`.")
+                     notifier.notify(f"❓ **UNKNOWN COMMAND**\nI didn't understand `{cmd}`.\nTry `/help`.")
 
             time.sleep(2) # Poll interval
         except Exception as e:
@@ -95,7 +112,7 @@ def listen_for_commands(notifier, fix_client):
             time.sleep(5)
 
 def main():
-    global active_symbols, running
+    global active_symbols, running, last_chart_time
     logger.info("Starting AI Day Trader (cTrader FIX)...")
     
     # Initialize Notifications
@@ -140,7 +157,8 @@ def main():
         
         # Start Command Listener
         import threading
-        cmd_thread = threading.Thread(target=listen_for_commands, args=(notifier, fix_client), daemon=True)
+        # Pass 'loader' to listener for chart generation
+        cmd_thread = threading.Thread(target=listen_for_commands, args=(notifier, fix_client, loader), daemon=True)
         cmd_thread.start()
         
         logger.info("Entering Main Loop...")
@@ -150,6 +168,18 @@ def main():
                 if check_stop():
                     running = False
                     break
+                
+                # Periodic Chart Check (Every 2 Hours = 7200s)
+                if time.time() - last_chart_time > 7200:
+                    last_chart_time = time.time()
+                    sym = active_symbols[0] if active_symbols else None
+                    if sym:
+                        logger.info(f"Auto-generating periodic chart for {sym}...")
+                        df = loader.get_latest_bars(sym, length=100)
+                        if df is not None and len(df) > 10:
+                            fpath = generate_candlestick_chart(df, sym)
+                            if fpath:
+                                notifier.notify_image(fpath, f"🕑 Periodic Chart: {sym}")
 
                 # Main strategy loop
                 # Use copy of active_symbols to handle dynamic changes safely
