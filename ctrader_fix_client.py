@@ -243,8 +243,16 @@ class CTraderFixClient:
         return "\n".join(lines)
         
     def handle_market_data(self, symbol_id, price):
-        # Update internal cache
+        # Ensure symbol_id is string
+        if isinstance(symbol_id, bytes):
+            symbol_id = symbol_id.decode()
+
         self.latest_prices[str(symbol_id)] = price
+        if hasattr(self, 'last_price_times'):
+             self.last_price_times[symbol_id] = datetime.now()
+             
+        for cb in self.market_data_callbacks:
+            cb(symbol_id, price)
         
     def start(self):
         logger.info("Connecting to cTrader FIX...")
