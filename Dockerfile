@@ -24,6 +24,8 @@ COPY requirements.txt .
 
 # Install Dependencies
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Force binary install for pandas/numpy to avoid source build failures (pkg_resources error)
+RUN pip install --no-cache-dir --only-binary=:all: "pandas<3.0.0" "numpy<2.0.0"
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy Application Code
