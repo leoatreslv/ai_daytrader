@@ -195,7 +195,13 @@ def main():
                     if sym:
                         logger.info(f"Auto-generating periodic chart for {sym}...")
                         df = loader.get_latest_bars(sym, length=100)
-                        if df is not None and len(df) > 10:
+                        
+                        if df is not None:
+                             logger.info(f"Periodic Chart: Retrieved {len(df)} bars for {sym}")
+                        else:
+                             logger.info(f"Periodic Chart: No bars for {sym}")
+
+                        if df is not None and len(df) >= 1:
                             fpath = generate_candlestick_chart(df, sym)
                             if fpath:
                                 notifier.notify_image(fpath, f"🕑 Periodic Chart: {sym}")
