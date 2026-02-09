@@ -27,10 +27,10 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel setuptools-scm
 # This prevents the "Building wheel for pandas failed" error
 RUN pip install --no-cache-dir --only-binary=:all: "numpy<2.0.0" "pandas<3.0.0"
 
-# 4. Install pandas-ta (The Tricky Part)
-# - Install from GitHub development branch (standard release is missing/broken on PyPI)
-# - Use --no-build-isolation to force it to use the pre-installed numpy/pandas
-RUN pip install --no-cache-dir --no-build-isolation "pandas_ta @ https://github.com/twopirllc/pandas-ta/archive/development.zip"
+# 4. Install pandas-ta (Fork)
+# Original twopirllc/pandas-ta is 404. Using active community fork pandas-ta-classic.
+# Use --no-build-isolation to force usage of pre-installed numpy/pandas.
+RUN pip install --no-cache-dir --no-build-isolation "pandas_ta @ https://github.com/xgboosted/pandas-ta-classic/archive/main.zip"
 
 # 5. Runtime Dependencies
 COPY requirements.txt .
