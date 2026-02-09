@@ -193,7 +193,14 @@ def main():
                 market_open = now.replace(hour=config.MARKET_OPEN_HOUR, minute=config.MARKET_OPEN_MINUTE, second=0, microsecond=0)
                 market_close = now.replace(hour=config.MARKET_CLOSE_HOUR, minute=config.MARKET_CLOSE_MINUTE, second=0, microsecond=0)
                 
-                is_open = market_open <= now < market_close
+                # Check for cross-midnight schedule
+                if market_open > market_close:
+                    # e.g. Open 07:00, Close 06:00 (next day)
+                    # Open if Now >= Open OR Now < Close
+                    is_open = now >= market_open or now < market_close
+                else:
+                    # Standard day schedule
+                    is_open = market_open <= now < market_close
                 
                 if not is_open:
                     if active_symbols: # If we have active symbols or open positions, we might need to close/pause
