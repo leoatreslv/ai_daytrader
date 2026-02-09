@@ -29,10 +29,21 @@ class FixSession:
 
     def connect(self):
         try:
+            logger.info(f"Connecting to {self.host}:{self.port}...")
             raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             raw_sock.settimeout(10.0) 
             
+            # Use a more permissive SSL context for compatibility with OpenSSL 3.0+ and legacy servers
             context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            
+            # Try to lower security level for broader compatibility (Fixes 'Read error: 56' on Debian Bookworm)
+            try:
+                context.set_ciphers('DEFAULT@SECLEVEL=1')
+            except Exception as e:
+                logger.debug(f"Could not set cipher security level: {e}")
+
             self.sock = context.wrap_socket(raw_sock, server_hostname=self.host)
             self.sock.connect((self.host, self.port))
             
