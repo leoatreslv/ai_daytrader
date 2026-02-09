@@ -34,18 +34,25 @@ class FixSession:
             raw_sock.settimeout(10.0) 
             
             # Use a more permissive SSL context for compatibility with OpenSSL 3.0+ and legacy servers
+            # Use a more permissive SSL context
             context = ssl.create_default_context()
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
             
-            # Try to lower security level for broader compatibility (Fixes 'Read error: 56' on Debian Bookworm)
+            # Allow legacy renegotiation in case server needs it
+            context.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0)
+            
+            # Maximally permissive ciphers (SECLEVEL=0)
             try:
-                context.set_ciphers('DEFAULT@SECLEVEL=1')
+                context.set_ciphers('ALL:@SECLEVEL=0')
+                logger.debug("SSL: Set cipher list to ALL:@SECLEVEL=0")
             except Exception as e:
-                logger.debug(f"Could not set cipher security level: {e}")
+                logger.debug(f"SSL: Could not set SECLEVEL=0: {e}")
 
             self.sock = context.wrap_socket(raw_sock, server_hostname=self.host)
             self.sock.connect((self.host, self.port))
+            
+            logger.info(f"SSL Connected. Version: {self.sock.version()}, Cipher: {self.sock.cipher()}")
             
             self.connected = True
             self.running = True
