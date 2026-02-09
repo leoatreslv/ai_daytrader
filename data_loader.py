@@ -28,7 +28,23 @@ class DataLoader:
             return None
         
         df = pd.DataFrame(self.ticks[symbol_id])
-        df['close'] = df['price']
-        # Resample to 1min bars
-        # For demo, just return ticks as "bars" if we have enough
-        return df.tail(length)
+        df['time'] = pd.to_datetime(df['time'])
+        df.set_index('time', inplace=True)
+        
+        # Resample to 1-minute OHLC bars
+        bars = df['price'].resample('1min').ohlc()
+        
+        # Add Volume (count of ticks)
+        bars['volume'] = df['price'].resample('1min').count()
+        
+        # Drop empty intervals (no ticks)
+        bars.dropna(inplace=True)
+        
+        # Rename columns to lowercase for consistency
+        bars.columns = ['open', 'high', 'low', 'close', 'volume']
+        
+        if len(bars) < 2:
+            # If not enough aggregated bars, return distinct None to signal "Waiting for more data"
+            return None
+            
+        return bars.tail(length)
