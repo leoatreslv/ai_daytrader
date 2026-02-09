@@ -74,7 +74,8 @@ class FixSession:
             msg.append_pair(49, self.sender_comp_id)
             msg.append_pair(56, self.target_comp_id)
             msg.append_pair(50, self.sender_sub_id)
-            msg.append_pair(57, self.sender_sub_id)
+            msg.append_pair(50, self.sender_sub_id)
+            # msg.append_pair(57, self.sender_sub_id) # Removing TargetSubID likely causes disconnect if server doesn't expect it
             msg.append_pair(34, self.msg_seq_num)
             
             self.msg_seq_num += 1
