@@ -170,8 +170,8 @@ def main():
                     running = False
                     break
                 
-                # Periodic Chart Check (Every 2 Hours = 7200s)
-                if time.time() - last_chart_time > 7200:
+                # Periodic Chart Check (Default 2 Hours = 7200s, Configurable)
+                if time.time() - last_chart_time > config.CHART_INTERVAL:
                     last_chart_time = time.time()
                     sym = active_symbols[0] if active_symbols else None
                     if sym:
