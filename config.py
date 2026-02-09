@@ -28,6 +28,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Trading Parameters
 # Trading Parameters
+MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", "15")) # 3 PM
+MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", "50")) # 50 Min
 TARGET_SYMBOLS = ["41"] # XAUUSD (ID 41)
 # TARGET_SYMBOLS = ["1"] # cTrader Symbol IDs (e.g. 1 might be EURUSD, need to map SPY/NSA equivalent)
 # NOTE: cTrader uses integer Symbol IDs. User needs to find IDs for "US Indices".

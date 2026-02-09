@@ -188,6 +188,15 @@ def main():
                     running = False
                     break
                 
+                # Market Close Check
+                now = datetime.now()
+                if now.hour == config.MARKET_CLOSE_HOUR and now.minute >= config.MARKET_CLOSE_MINUTE:
+                    logger.warning("Market Close Reached. Closing all positions and stopping.")
+                    notifier.notify("🛑 **MARKET CLOSE REACHED**\nStopping bot and closing positions.")
+                    fix_client.close_all_positions()
+                    running = False
+                    break
+                
                 # Periodic Chart Check (Default 2 Hours = 7200s, Configurable)
                 if time.time() - last_chart_time > config.CHART_INTERVAL:
                     last_chart_time = time.time()

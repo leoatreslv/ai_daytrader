@@ -208,6 +208,31 @@ class CTraderFixClient:
         self.open_orders = {} # OrderID -> {Symbol, Side, Qty, Price}
         self.positions = {} # SymbolID -> NetQty (+Buy, -Sell)
 
+    def close_all_positions(self):
+        """Close all open positions with Market Orders."""
+        if not self.positions:
+            logger.info("No positions to close.")
+            return
+
+        logger.info(f"Closing all positions: {self.positions}")
+        if self.notifier:
+            self.notifier.notify(f"🛑 **MARKET CLOSE**\nClosing all {len(self.positions)} positions.")
+
+        # Iterate copy of keys to avoid modification during iteration issues
+        for symbol_id, qty in list(self.positions.items()):
+            if qty == 0: continue
+            
+            # Determine opposite side
+            side = '2' if qty > 0 else '1' # Sell if Long, Buy if Short
+            abs_qty = abs(qty)
+            
+            logger.info(f"Closing {symbol_id}: {'SELL' if side=='2' else 'BUY'} {abs_qty}")
+            self.submit_order(symbol_id, abs_qty, side, order_type='1')
+            
+            # Optimistically remove from local state (will be confirmed by Execution Report)
+            # del self.positions[symbol_id] 
+            # Better to let the execution report handle the update, but for "Close All" we might want to flag it.
+
     def get_orders_string(self):
         if not self.open_orders:
             return "📭 **NO ACTIVE ORDERS**"
