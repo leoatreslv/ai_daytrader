@@ -192,23 +192,32 @@ class CTraderFixClient:
         
     def start(self):
         logger.info("Connecting to cTrader FIX...")
-        try:
-            self.quote_session.connect()
-        except:
-             pass 
-        time.sleep(2) 
         
-        # Retry logic for Trade Session (it tends to be flaky if connected too fast)
-        for i in range(3):
+        # Retry Logic for Quote Session (5x)
+        for i in range(5):
+            try:
+                self.quote_session.connect()
+            except Exception as e:
+                 logger.error(f"Quote connect error: {e}")
+            
+            time.sleep(2)
+            if self.quote_session.connected:
+                break
+            logger.warning(f"Quote session failed to connect. Retrying ({i+1}/5)...")
+            time.sleep(2)
+            
+        # Retry logic for Trade Session (5x)
+        for i in range(5):
             try:
                 self.trade_session.connect()
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Trade connect error: {e}")
+
             time.sleep(2)
             if self.trade_session.connected:
                 break
-            logger.warning(f"Trade session failed to connect. Retrying ({i+1}/3)...")
-            time.sleep(3)
+            logger.warning(f"Trade session failed to connect. Retrying ({i+1}/5)...")
+            time.sleep(2)
         
         # Final Status Check
         if self.quote_session.connected and self.trade_session.connected:
