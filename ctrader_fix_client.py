@@ -284,7 +284,33 @@ class CTraderFixClient:
                  # Map Name -> ID (e.g. "EURUSD" -> "1")
                  self.symbol_map[sym_name.decode()] = sym_id.decode()
                  # Also valid to map "EUR/USD" or other variations if needed later based on 107 format
-        
+
+        elif msg_type == b'8': # Execution Report
+            exec_type = msg.get(150) # 0=New, F=Trade, 8=Rejected
+            ord_status = msg.get(39) # 0=New, 1=PartiallyFilled, 2=Filled, 8=Rejected
+            symbol = msg.get(55).decode() if msg.get(55) else "Unknown"
+            side = msg.get(54) # 1=Buy, 2=Sell
+            side_str = "BUY" if side == b'1' else "SELL"
+            qty = msg.get(38).decode() if msg.get(38) else "?"
+            price = msg.get(44).decode() if msg.get(44) else "Market"
+            text = msg.get(58).decode() if msg.get(58) else ""
+            
+            if exec_type == b'0': # New
+                logger.info(f"[{source}] Order Accepted: {side_str} {symbol} {qty}")
+                if self.notifier: self.notifier.notify(f"✅ **ORDER ACCEPTED**\n{side_str} {symbol} {qty}")
+            
+            elif exec_type == b'F': # Trade (Partial or Full Fill)
+                fill_px = msg.get(31).decode() if msg.get(31) else price
+                fill_qty = msg.get(32).decode() if msg.get(32) else qty
+                msg_text = f"💰 **ORDER FILLED** 💰\n{side_str} {symbol}\nQty: {fill_qty} @ {fill_px}"
+                logger.info(msg_text)
+                if self.notifier: self.notifier.notify(msg_text)
+                
+            elif exec_type == b'8': # Rejected
+                msg_text = f"🚫 **ORDER REJECTED**\n{side_str} {symbol}\nReason: {text}"
+                logger.warning(msg_text)
+                if self.notifier: self.notifier.notify(msg_text)
+                
         else:
             logger.debug(f"[{source}] Unknown MsgType: {msg_type}")
 

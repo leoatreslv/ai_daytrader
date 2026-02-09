@@ -81,6 +81,7 @@ def test_order_execution():
         
         # Execute Market Order
         logger.info(f"Placing Market Order (Qty: {qty})...")
+        if notifier: notifier.notify(f"🚀 **SUBMITTING ORDER** 🚀\nSymbol: {target_sym}\nSide: BUY\nQty: {qty}")
         client.submit_order(symbol_id, qty, side, order_type='1')
         
         # Calculate Protection
