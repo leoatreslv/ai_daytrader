@@ -46,7 +46,8 @@
 -   `/start`: Shows the welcome menu.
 -   `/status`: Checks if the bot is connected to cTrader (Quote & Trade).
 -   `/orders`: Lists all currently active (working) orders.
--   `/positions` (or `/pos`): Lists all open positions with net quantity.
+-   `/positions` (or `/pos`: Lists all open positions with net quantity.
+-   `/sync`: Manually fetches active Orders & Positions from the server (Use after restart).
 -   `/symbol <SYMBOL>`: Switches the active trading symbol (e.g., `/symbol EURUSD`).
 -   `/help`: Displays the list of available commands.
 
