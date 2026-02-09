@@ -22,7 +22,9 @@ class Indicators:
         if 'RSI' not in cols and 'RSI_14' not in cols:
             rsi = ta.rsi(df['close'], length=14)
             if rsi is not None:
-                df = pd.concat([df, rsi], axis=1)
+                # df = pd.concat([df, rsi], axis=1)
+                # Use join to be safe on index alignment
+                df = df.join(rsi)
 
         # Bollinger Bands
         # Check if BBL/BBU exist
@@ -30,13 +32,15 @@ class Indicators:
         if not any(c.startswith('BBL') for c in cols):
             bbands = ta.bbands(df['close'], length=20, std=2)
             if bbands is not None:
-                 df = pd.concat([df, bbands], axis=1)
+                 # df = pd.concat([df, bbands], axis=1)
+                 df = df.join(bbands)
 
         # MACD
         if not any(c.startswith('MACD') for c in cols):
             macd = ta.macd(df['close'])
             if macd is not None:
-                df = pd.concat([df, macd], axis=1)
+                # df = pd.concat([df, macd], axis=1)
+                df = df.join(macd)
 
         return df
 

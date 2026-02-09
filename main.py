@@ -296,6 +296,13 @@ def main():
                 if smart_sleep(1):
                     running = False
                     break
+                    
+            except Exception as e:
+                import traceback
+                logger.error(f"Error in Main Loop: {e}")
+                logger.error(traceback.format_exc())
+                if smart_sleep(5): # Wait a bit before retry to avoid rapid loops
+                     pass
 
             except KeyboardInterrupt:
                 logger.info("Stopping...")

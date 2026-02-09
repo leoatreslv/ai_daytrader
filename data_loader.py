@@ -34,6 +34,8 @@ class DataLoader:
         df = pd.DataFrame(self.ticks[symbol_id])
         df['time'] = pd.to_datetime(df['time'])
         df.set_index('time', inplace=True)
+        # Ensure unique index
+        df = df[~df.index.duplicated(keep='last')]
         
         # Resample to 1-minute OHLC bars
         bars = df['price'].resample('1min').ohlc()
