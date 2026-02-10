@@ -207,6 +207,8 @@ class CTraderFixClient:
         # Tracking State (In-Memory)
         self.open_orders = {} # OrderID -> {Symbol, Side, Qty, Price}
         self.positions = {} # SymbolID -> NetQty (+Buy, -Sell)
+        self.order_counter = 0
+        self.lock = threading.Lock()
 
     def close_all_positions(self):
         """Close all open positions with Market Orders."""
@@ -218,7 +220,7 @@ class CTraderFixClient:
         if self.notifier:
             self.notifier.notify(f"🛑 **MARKET CLOSE**\nClosing all {len(self.positions)} positions.")
 
-        # Iterate copy of keys to avoid modification during iteration issues
+        # Iterate copy of keys
         for symbol_id, qty in list(self.positions.items()):
             if qty == 0: continue
             
@@ -229,9 +231,8 @@ class CTraderFixClient:
             logger.info(f"Closing {symbol_id}: {'SELL' if side=='2' else 'BUY'} {abs_qty}")
             self.submit_order(symbol_id, abs_qty, side, order_type='1')
             
-            # Optimistically remove from local state (will be confirmed by Execution Report)
-            # del self.positions[symbol_id] 
-            # Better to let the execution report handle the update, but for "Close All" we might want to flag it.
+            # Use 'manual' update to avoid race condition if ExecReport is slow? 
+            # No, let ExecReport handle it to be accurate.
 
     def get_orders_string(self):
         if not self.open_orders:
@@ -378,6 +379,20 @@ class CTraderFixClient:
                 logger.info(msg_text)
                 if self.notifier: self.notifier.notify(msg_text)
                 
+                # Update Net Position Tracking
+                try:
+                    f_qty = float(fill_qty)
+                    if side == b'2': # Sell
+                        f_qty = -f_qty
+                    
+                    # Accumulate net position
+                    self.positions[symbol] = self.positions.get(symbol, 0.0) + f_qty
+                    logger.info(f"Updated Position for {symbol}: {self.positions[symbol]}")
+                    
+                except Exception as e:
+                    logger.error(f"Error updating position from execution report: {e}")
+
+                
             elif exec_type == b'8': # Rejected
                 msg_text = f"🚫 **ORDER REJECTED**\n{side_str} {symbol}\nReason: {text}"
                 logger.warning(msg_text)
@@ -404,13 +419,15 @@ class CTraderFixClient:
                 short_qty = float(msg.get(705).decode()) if msg.get(705) else 0.0
                 
                 net = long_qty - short_qty
+                
+                # Accumulate (since we might receive multiple reports for hedging)
+                # Note: clear_state() MUST be called before requesting positions
                 if net != 0:
-                    self.positions[sym] = net
-                    # logger.info(f"Restored Position: {sym} = {net}")
-                else:
-                    # Explicitly remove if net is 0 (closed)
-                    if sym in self.positions:
-                        del self.positions[sym]
+                    self.positions[sym] = self.positions.get(sym, 0.0) + net
+                    # logger.info(f"Accumulated Position: {sym} = {self.positions[sym]}")
+                # else:
+                    # Do not delete here, as other reports might add to it.
+                    # We rely on clear_state() at start.
                         
             except Exception as e:
                 logger.error(f"Error parsing Position Report: {e}")
@@ -535,10 +552,16 @@ class CTraderFixClient:
     def submit_order(self, symbol_id, qty, side, order_type='1', price=None, stop_px=None):
         # New Order Single (D)
         # order_type: 1=Market, 2=Limit, 3=Stop, 4=StopLimit
+        with self.lock:
+            self.order_counter += 1
+            counter = self.order_counter
+            
         msg = simplefix.FixMessage()
         self.trade_session._add_header(msg, "D")
         
-        msg.append_pair(11, f"ord{int(time.time() * 1000)}") # ClOrdID (unique)
+        # Unique ClOrdID: Time + Counter to prevent collisions in rapid fire (SL/TP)
+        cls_ord_id = f"ord{int(time.time() * 1000)}_{counter}"
+        msg.append_pair(11, cls_ord_id) 
         msg.append_pair(55, symbol_id)
         msg.append_pair(54, side) 
         msg.append_pair(60, datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3])
