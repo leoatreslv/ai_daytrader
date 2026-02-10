@@ -46,3 +46,8 @@ TAKE_PROFIT_PCT = 0.01
 
 # Charting Configuration
 CHART_INTERVAL = int(os.getenv("CHART_INTERVAL", "7200")) # Default 2 hours
+
+MARKET_OPEN_HOUR = int(os.getenv("MARKET_OPEN_HOUR", "9"))
+MARKET_OPEN_MINUTE = int(os.getenv("MARKET_OPEN_MINUTE", "30"))
+MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", "15"))
+MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", "00"))

@@ -154,6 +154,19 @@ def main():
         
         # Fetch all symbols (Name -> ID)
         fix_client.fetch_symbols()
+        
+        # Request Initial Positions - Wait for connection first
+        logger.info("Waiting for Trade Session to be ready for Position Request...")
+        retries = 10
+        while not fix_client.trade_session.connected and retries > 0:
+            time.sleep(1)
+            retries -= 1
+            
+        if fix_client.trade_session.connected:
+            fix_client.clear_state()
+            fix_client.send_positions_request()
+        else:
+            logger.error("Trade Session not connected after wait. Skipping initial position request.")
 
         # Initial Subscription
         # Resolve initial symbols if they are names

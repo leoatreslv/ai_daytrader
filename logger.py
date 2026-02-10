@@ -4,7 +4,7 @@ from logging.handlers import RotatingFileHandler
 
 import os
 
-def setup_logger(name, log_file="/app/logs/trading_system.log", level=logging.INFO):
+def setup_logger(name, log_file="logs/trading_system.log", level=logging.INFO):
     """
     Setup a logger that writes to a file and the console.
     """

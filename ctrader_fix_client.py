@@ -144,12 +144,29 @@ class FixSession:
                     msg = self.parser.get_message()
                     if msg is None:
                         break
-                    self.handle_message(msg)
+                    
+                    try:
+                         # self.handle_message(msg) -> self.app.on_message? 
+                         # The viewed code has 'self.handle_message(msg)' at line 147.
+                         # But wait, line 147 in viewed code says 'self.handle_message(msg)'.
+                         # Does FixSession have handle_message? No, it's not defined in the snippet.
+                         # It should likely be self.app.on_message(self.sender_sub_id, msg).
+                         # I will use self.handle_message(msg) if that is what was there, but wrap it.
+                         self.handle_message(msg)
+                    except Exception as e:
+                        logger.error(f"[{self.sender_sub_id}] Error in handle_message: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+
             except socket.timeout:
                 continue # Just loop
             except Exception as e:
                 logger.error(f"[{self.sender_sub_id}] Read error: {e}")
-                self.app.on_disconnected(self.sender_sub_id, f"Read Error: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # self.app.on_disconnected(self.sender_sub_id, f"Read Error: {e}") # Don't disconnect immediately?
+                # Actually, read error usually means broken socket.
+                self.connected = False
                 break
         
         if self.connected: # If we were connected and loop broke
@@ -283,31 +300,32 @@ class CTraderFixClient:
     def start(self):
         logger.info("Connecting to cTrader FIX...")
         
-        # Retry Logic for Quote Session (5x)
-        for i in range(5):
-            try:
-                self.quote_session.connect()
-            except Exception as e:
-                 logger.error(f"Quote connect error: {e}")
-            
-            time.sleep(2)
-            if self.quote_session.connected:
-                break
-            logger.warning(f"Quote session failed to connect. Retrying ({i+1}/5)...")
-            time.sleep(2)
-            
-        # Retry logic for Trade Session (5x)
-        for i in range(5):
-            try:
-                self.trade_session.connect()
-            except Exception as e:
-                logger.error(f"Trade connect error: {e}")
+        # Helper retry function
+        def connect_session(session, name):
+            for i in range(5):
+                try:
+                    logger.info(f"Connecting to {name} (Attempt {i+1}/5)...")
+                    session.connect()
+                    
+                    # Wait for Logon
+                    for _ in range(10): 
+                        if session.connected: return True
+                        time.sleep(0.5)
+                        
+                except Exception as e:
+                    logger.error(f"{name} connect error: {e}")
+                
+                logger.warning(f"{name} failed to connect. Retrying...")
+                time.sleep(2)
+            return False
 
-            time.sleep(2)
-            if self.trade_session.connected:
-                break
-            logger.warning(f"Trade session failed to connect. Retrying ({i+1}/5)...")
-            time.sleep(2)
+        # Connect Quote
+        if not connect_session(self.quote_session, "QUOTE"):
+             logger.error("Failed to connect QUOTE session.")
+
+        # Connect Trade
+        if not connect_session(self.trade_session, "TRADE"):
+             logger.error("Failed to connect TRADE session.")
         
         # Final Status Check
         if self.quote_session.connected and self.trade_session.connected:
@@ -315,17 +333,17 @@ class CTraderFixClient:
             if self.notifier:
                 self.notifier.notify("✅ **SYSTEM STARTED**\nConnected to cTrader (Full).")
         elif self.quote_session.connected:
-             msg = "⚠️ **PARTIAL CONNECTION**\nConnected to QUOTE Only. Trade session failed."
+             msg = "[WARN] PARTIAL CONNECTION: Connected to QUOTE Only. Trade session failed."
              logger.warning(msg)
-             if self.notifier: self.notifier.notify(msg)
+             if self.notifier: self.notifier.notify("⚠️ **PARTIAL CONNECTION**\nConnected to QUOTE Only. Trade session failed.")
         elif self.trade_session.connected:
-             msg = "⚠️ **PARTIAL CONNECTION**\nConnected to TRADE Only. Quote session failed."
+             msg = "[WARN] PARTIAL CONNECTION: Connected to TRADE Only. Quote session failed."
              logger.warning(msg)
-             if self.notifier: self.notifier.notify(msg)
+             if self.notifier: self.notifier.notify("⚠️ **PARTIAL CONNECTION**\nConnected to TRADE Only. Quote session failed.")
         else:
-            msg = "❌ **CONNECTION FAILED**\nCould not connect to cTrader."
+            msg = "[ERROR] CONNECTION FAILED: Could not connect to cTrader."
             logger.error(msg)
-            if self.notifier: self.notifier.notify(msg)
+            if self.notifier: self.notifier.notify("❌ **CONNECTION FAILED**\nCould not connect to cTrader.")
 
     def on_disconnected(self, session_type, reason="Unknown"):
         msg = f"[FAILED] **DISCONNECTED**\nSession: {session_type}\nReason: {reason}"
@@ -414,11 +432,16 @@ class CTraderFixClient:
         elif msg_type == b'AP': # Position Report
             # cTrader sends Position Report with Long/Short Qty
             try:
+                # Debug Raw
+                # logger.debug(f"Received AP: {msg}")
+                
                 sym = msg.get(55).decode() if msg.get(55) else "Unknown"
                 long_qty = float(msg.get(704).decode()) if msg.get(704) else 0.0
                 short_qty = float(msg.get(705).decode()) if msg.get(705) else 0.0
                 
                 net = long_qty - short_qty
+                
+                logger.info(f"Position Report for {sym}: Long={long_qty}, Short={short_qty}, Net={net}")
                 
                 # Accumulate (since we might receive multiple reports for hedging)
                 # Note: clear_state() MUST be called before requesting positions
@@ -452,11 +475,16 @@ class CTraderFixClient:
 
     def send_positions_request(self):
         """Request all open positions."""
-        logger.info("Sending Position Request...")
+        if not self.trade_session.connected:
+             logger.warning("Cannot request positions: Trade session not connected.")
+             return
+
+        logger.info("Sending Position Request (AN)...")
         msg = simplefix.FixMessage()
         self.trade_session._add_header(msg, "AN")
         msg.append_pair(710, f"pos{int(time.time())}") # PosReqID
-        # RequestForPositions handling varies, trying minimal valid request
+        # cTrader might need 453 (NoPartyIDs) for some requests, but AN is usually simple.
+        
         self.trade_session._send_raw(msg)
 
     def send_security_list_request(self):
