@@ -321,10 +321,11 @@ def main():
                                  tp_price = current_price - tp_dist
                                  
                              # Protection
-                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='3', stop_px=f"{sl_price:.5f}")
-                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='2', price=f"{tp_price:.5f}")
+                             # XAUUSD usually requires 2 decimal places
+                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='3', stop_px=f"{sl_price:.2f}")
+                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='2', price=f"{tp_price:.2f}")
                              
-                             notifier.notify(f"🛡️ **PROTECTION PLACED**\nSL: {sl_price:.5f}\nTP: {tp_price:.5f}")
+                             notifier.notify(f"🛡️ **PROTECTION PLACED**\nSL: {sl_price:.2f}\nTP: {tp_price:.2f}")
                              
                              if smart_sleep(60):
                                  running = False
