@@ -26,7 +26,20 @@ class FixSession:
         self.msg_seq_num = 1
         self.running = False
         
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+
+    def stop(self):
+        """Force stop the session."""
+        self.running = False
+        self.connected = False
+        if self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+                self.sock.close()
+            except:
+                pass
+            self.sock = None
+
 
     def connect(self):
         try:
@@ -223,9 +236,16 @@ class CTraderFixClient:
         self.symbol_map = {}
         # Tracking State (In-Memory)
         self.open_orders = {} # OrderID -> {Symbol, Side, Qty, Price}
-        self.positions = {} # SymbolID -> NetQty (+Buy, -Sell)
+        self.positions = {} # SymbolID -> {'long': 0.0, 'short': 0.0}
         self.order_counter = 0
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+    
+    def stop(self):
+        """Stop all sessions."""
+        logger.info("Stopping FIX Client...")
+        self.quote_session.stop()
+        self.trade_session.stop()
+
 
     def close_all_positions(self):
         """Close all open positions with Market Orders."""
@@ -238,18 +258,17 @@ class CTraderFixClient:
             self.notifier.notify(f"🛑 **MARKET CLOSE**\nClosing all {len(self.positions)} positions.")
 
         # Iterate copy of keys
-        for symbol_id, qty in list(self.positions.items()):
-            if qty == 0: continue
+        for symbol_id, pos_data in list(self.positions.items()):
+            long_qty = pos_data.get('long', 0.0)
+            short_qty = pos_data.get('short', 0.0)
             
-            # Determine opposite side
-            side = '2' if qty > 0 else '1' # Sell if Long, Buy if Short
-            abs_qty = abs(qty)
-            
-            logger.info(f"Closing {symbol_id}: {'SELL' if side=='2' else 'BUY'} {abs_qty}")
-            self.submit_order(symbol_id, abs_qty, side, order_type='1')
-            
-            # Use 'manual' update to avoid race condition if ExecReport is slow? 
-            # No, let ExecReport handle it to be accurate.
+            if long_qty > 0:
+                logger.info(f"Closing {symbol_id}: SELL {long_qty} (Close Long)")
+                self.submit_order(symbol_id, long_qty, '2', order_type='1')
+                
+            if short_qty > 0:
+                 logger.info(f"Closing {symbol_id}: BUY {short_qty} (Close Short)")
+                 self.submit_order(symbol_id, short_qty, '1', order_type='1')
 
     def get_orders_string(self):
         if not self.open_orders:
@@ -266,8 +285,11 @@ class CTraderFixClient:
             
         lines = ["💼 **CURRENT POSITIONS**"]
         has_pos = False
-        for sym_id, qty in self.positions.items():
-            if qty == 0: continue
+        for sym_id, pos_data in self.positions.items():
+            long_qty = pos_data.get('long', 0.0)
+            short_qty = pos_data.get('short', 0.0)
+            
+            if long_qty == 0 and short_qty == 0: continue
             has_pos = True
             
             # Try to resolve name
@@ -277,8 +299,10 @@ class CTraderFixClient:
                     sym_name = name
                     break
             
-            side = "LONG" if qty > 0 else "SHORT"
-            lines.append(f"- {sym_name}: {side} {abs(qty)}")
+            if long_qty > 0:
+                lines.append(f"- {sym_name}: LONG {long_qty}")
+            if short_qty > 0:
+                lines.append(f"- {sym_name}: SHORT {short_qty}")
             
         if not has_pos:
             return "🧘 **NO OPEN POSITIONS**"
@@ -308,14 +332,15 @@ class CTraderFixClient:
                     session.connect()
                     
                     # Wait for Logon
-                    for _ in range(10): 
-                        if session.connected: return True
+                    for _ in range(20): 
+                        if session.logged_on: return True
+                        if not session.running: return False # Check if stopped
                         time.sleep(0.5)
                         
                 except Exception as e:
                     logger.error(f"{name} connect error: {e}")
                 
-                logger.warning(f"{name} failed to connect. Retrying...")
+                logger.warning(f"{name} failed to connect (or Logon). Retrying...")
                 time.sleep(2)
             return False
 
@@ -366,6 +391,14 @@ class CTraderFixClient:
         elif msg_type == b'Y': # Market Data Request Reject
             logger.warning(f"[{source}] MD REJECT: {msg.get(58)} (ReqID: {msg.get(262)})")
 
+        elif msg_type == b'j': # Business Message Reject
+            ref_msg_type = msg.get(372)
+            text = msg.get(58).decode() if msg.get(58) else "Unknown"
+            reason = msg.get(380)
+            logger.error(f"[{source}] BUSINESS REJECT: Type={ref_msg_type}, Reason={reason}, Text={text}")
+            if self.notifier:
+                self.notifier.notify(f"🚫 **BUSINESS REJECT**\nReason: {text}")
+
         elif msg_type == b'y': # Security List
              # cTrader sends 55=ID, 107=Description (Name)
              sym_id = msg.get(55)
@@ -388,14 +421,24 @@ class CTraderFixClient:
             
             if exec_type == b'0': # New
                 logger.info(f"[{source}] Order Accepted: {side_str} {symbol} {qty}")
+                # Add to Open Orders Tracking
+                self.open_orders[order_id] = {
+                    "symbol": symbol, "side": side_str, "qty": qty, "price": price
+                }
                 if self.notifier: self.notifier.notify(f"✅ **ORDER ACCEPTED**\n{side_str} {symbol} {qty}")
             
             elif exec_type == b'F': # Trade (Partial or Full Fill)
                 fill_px = msg.get(31).decode() if msg.get(31) else price
                 fill_qty = msg.get(32).decode() if msg.get(32) else qty
-                msg_text = f"💰 **ORDER FILLED** 💰\n{side_str} {symbol}\nQty: {fill_qty} @ {fill_px}"
-                logger.info(msg_text)
-                if self.notifier: self.notifier.notify(msg_text)
+                
+                # Plain text log
+                log_msg = f"ORDER FILLED: {side_str} {symbol} Qty: {fill_qty} @ {fill_px}"
+                logger.info(log_msg)
+                
+                # Rich text notification
+                if self.notifier: 
+                    notify_msg = f"💰 **ORDER FILLED** 💰\n{side_str} {symbol}\nQty: {fill_qty} @ {fill_px}"
+                    self.notifier.notify(notify_msg)
                 
                 # Update Net Position Tracking
                 try:
@@ -403,23 +446,39 @@ class CTraderFixClient:
                     if side == b'2': # Sell
                         f_qty = -f_qty
                     
+                    
                     # Accumulate net position
-                    self.positions[symbol] = self.positions.get(symbol, 0.0) + f_qty
-                    logger.info(f"Updated Position for {symbol}: {self.positions[symbol]}")
+                    # For robust hedging support, we should rely on Position Reports (AP) or distinct logic.
+                    # Since we are switching to Sync-On-Fill, we can skip manual accumulation here 
+                    # OR do a best-effort update.
+                    
+                    # Logic: Side 1 (Buy) adds to Long? Or reduces Short?
+                    # Without knowing if it's "Close" or "Open", it's ambiguous in Hedging.
+                    # Best to rely on the Sync triggered below.
+                    pass
                     
                 except Exception as e:
                     logger.error(f"Error updating position from execution report: {e}")
 
                 
             elif exec_type == b'8': # Rejected
-                msg_text = f"🚫 **ORDER REJECTED**\n{side_str} {symbol}\nReason: {text}"
-                logger.warning(msg_text)
-                if self.notifier: self.notifier.notify(msg_text)
+                if order_id in self.open_orders:
+                    del self.open_orders[order_id]
+                
+                # Plain text log
+                log_msg = f"ORDER REJECTED: {side_str} {symbol} Reason: {text}"
+                logger.warning(log_msg)
+                
+                # Rich text notification
+                if self.notifier: 
+                    notify_msg = f"🚫 **ORDER REJECTED**\n{side_str} {symbol}\nReason: {text}"
+                    self.notifier.notify(notify_msg)
                 
             elif exec_type == b'4': # Canceled
                 if order_id in self.open_orders:
                     del self.open_orders[order_id]
                     logger.info(f"Order {order_id} Canceled.")
+                    if self.notifier: self.notifier.notify(f"🗑️ **ORDER CANCELED**\n{side_str} {symbol} {qty}")
             
             elif exec_type == b'I': # Order Status (Response to Mass Status)
                 # If active, add to tracking
@@ -427,31 +486,39 @@ class CTraderFixClient:
                      self.open_orders[order_id] = {
                         "symbol": symbol, "side": side_str, "qty": qty, "price": price
                     }
-                     # logger.info(f"Restored Active Order: {symbol} {side_str} {qty}")
+                
+                # If Filled, trigger a Sync to maintain accurate positions
+                if ord_status == b'2' or ord_status == b'1': 
+                    # Delay slightly to allow server to process, then Clear & Request
+                    def scheduled_sync():
+                        time.sleep(1)
+                        self.clear_state()
+                        self.send_positions_request()
+                        
+                    threading.Thread(target=scheduled_sync, daemon=True).start()
 
         elif msg_type == b'AP': # Position Report
             # cTrader sends Position Report with Long/Short Qty
             try:
                 # Debug Raw
-                # logger.debug(f"Received AP: {msg}")
+                # logger.info(f"Received AP (Raw): {msg}")
                 
                 sym = msg.get(55).decode() if msg.get(55) else "Unknown"
                 long_qty = float(msg.get(704).decode()) if msg.get(704) else 0.0
                 short_qty = float(msg.get(705).decode()) if msg.get(705) else 0.0
                 
-                net = long_qty - short_qty
+                logger.info(f"Position Report for {sym}: Long={long_qty}, Short={short_qty}")
                 
-                logger.info(f"Position Report for {sym}: Long={long_qty}, Short={short_qty}, Net={net}")
+                # Initialize format if not present
+                if sym not in self.positions:
+                    self.positions[sym] = {'long': 0.0, 'short': 0.0}
+                    
+                # Accumulate (since we might receive multiple reports)
+                self.positions[sym]['long'] += long_qty
+                self.positions[sym]['short'] += short_qty
                 
-                # Accumulate (since we might receive multiple reports for hedging)
-                # Note: clear_state() MUST be called before requesting positions
-                if net != 0:
-                    self.positions[sym] = self.positions.get(sym, 0.0) + net
-                    # logger.info(f"Accumulated Position: {sym} = {self.positions[sym]}")
-                # else:
-                    # Do not delete here, as other reports might add to it.
-                    # We rely on clear_state() at start.
-                        
+                logger.info(f"Updated Internal Position for {sym}: {self.positions[sym]}")
+ 
             except Exception as e:
                 logger.error(f"Error parsing Position Report: {e}")
 
@@ -475,15 +542,15 @@ class CTraderFixClient:
 
     def send_positions_request(self):
         """Request all open positions."""
-        if not self.trade_session.connected:
-             logger.warning("Cannot request positions: Trade session not connected.")
+        if not self.trade_session.logged_on:
+             logger.warning("Cannot request positions: Trade session not logged on.")
              return
 
         logger.info("Sending Position Request (AN)...")
         msg = simplefix.FixMessage()
         self.trade_session._add_header(msg, "AN")
         msg.append_pair(710, f"pos{int(time.time())}") # PosReqID
-        # cTrader might need 453 (NoPartyIDs) for some requests, but AN is usually simple.
+        # Tag 724 (PosReqType) removed - unsupported by cTrader Demo
         
         self.trade_session._send_raw(msg)
 
@@ -508,7 +575,8 @@ class CTraderFixClient:
         try:
             self.send_security_list_request()
             # Wait for symbols to populate
-            for _ in range(10): # Wait up to 5 seconds
+            for _ in range(20): # Wait up to 10 seconds (increased from 5s)
+                if not self.quote_session.running: break
                 time.sleep(0.5)
                 if len(self.symbol_map) > 10: 
                     break

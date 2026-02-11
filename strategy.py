@@ -11,6 +11,7 @@ class Strategy:
         self.llm = llm_client
         self.last_llm_check = None
         self.current_bias = "NEUTRAL"
+        self.last_signal_times = {} # Symbol -> Last Signal Candle Query Time
 
     def update_llm_bias(self, df):
         """
@@ -46,11 +47,17 @@ class Strategy:
             except Exception as e:
                 logger.error(f"Failed to update LLM bias: {e}")
 
-    def check_signal(self, df):
+    def check_signal(self, df, symbol):
         """
         Analyze dataframe and return a trading signal.
+        Ensures only one signal per candle per symbol.
         """
         if df is None or df.empty:
+            return None
+
+        # Cooldown check: One signal per candle
+        last_time = df.index[-1]
+        if symbol in self.last_signal_times and self.last_signal_times[symbol] == last_time:
             return None
 
         # Add Indicators
@@ -65,19 +72,25 @@ class Strategy:
         # Get latest technical signals
         signals = Indicators.check_signals(df)
         
+        signal = None
+        
         # Logic for Left-Side Reversal with LLM Confirmation
         # RSI Oversold + Below Lower BB + (Bullish OR Neutral Bias) -> BUY CALL
         if signals.get('rsi_oversold') and signals.get('below_bb'):
             if self.current_bias in ["BULLISH", "NEUTRAL"]:
-                return {"action": "BUY_CALL", "reason": f"Oversold + Below BB + Bias {self.current_bias}"}
+                signal = {"action": "BUY_CALL", "reason": f"Oversold + Below BB + Bias {self.current_bias}"}
             else:
                  logger.debug(f"Signal IGNORED: Oversold but Bias is {self.current_bias}")
         
         # RSI Overbought + Above Upper BB + (Bearish OR Neutral Bias) -> BUY PUT
         if signals.get('rsi_overbought') and signals.get('above_bb'):
             if self.current_bias in ["BEARISH", "NEUTRAL"]:
-                return {"action": "BUY_PUT", "reason": f"Overbought + Above BB + Bias {self.current_bias}"}
+                signal = {"action": "BUY_PUT", "reason": f"Overbought + Above BB + Bias {self.current_bias}"}
             else:
                  logger.debug(f"Signal IGNORED: Overbought but Bias is {self.current_bias}")
 
+        if signal:
+            self.last_signal_times[symbol] = last_time
+            return signal
+            
         return None

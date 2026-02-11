@@ -76,6 +76,7 @@ class TelegramProvider(NotificationProvider):
         except Exception as e:
             logger.error(f"Telegram photo error: {e}")
 
+
     def check_for_commands(self):
         """Polls for new commands from the authorized chat_id."""
         if not self.token or not self.chat_id:
@@ -84,8 +85,10 @@ class TelegramProvider(NotificationProvider):
         commands = []
         try:
             # timeout=0 for immediate return (we will control polling interval in main)
-            url = f"{self.base_url}/getUpdates?offset={self.last_update_id + 1}&timeout=1"
-            response = requests.get(url, timeout=5)
+            # Use 10s socket timeout for 1s long-poll to prevent ReadTimeout
+            # Add timeout to prevent blocking if network is slow
+            url = f"{self.base_url}/getUpdates?offset={self.last_update_id + 1}&limit=10&timeout=1"
+            response = requests.get(url, timeout=5) # 5s timeout total
             
             if response.status_code == 200:
                 data = response.json()
@@ -103,7 +106,11 @@ class TelegramProvider(NotificationProvider):
                             commands.append(text)
                             
         except Exception as e:
-            logger.error(f"Telegram polling error: {e}")
+            # Suppress ReadTimeout noise
+            if "Read timed out" in str(e):
+                pass
+            else:
+                logger.error(f"Telegram polling error: {e}")
             
         return commands
 

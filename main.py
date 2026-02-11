@@ -130,6 +130,10 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
             logger.error(f"Listener error: {e}")
             time.sleep(5)
 
+
+import signal
+import sys
+
 def main():
     global active_symbols, running, last_chart_time
     logger.info("Starting AI Day Trader (cTrader FIX)...")
@@ -148,6 +152,18 @@ def main():
     # Strategy
     strategy = Strategy(fix_client, llm) 
     
+    import os
+
+    # --- Signal Handling ---
+    def shutdown_handler(signum, frame):
+        print(f"\nSignal {signum} received. Forcing exit...")
+        # Force exit immediately, skipping cleanup that might hang
+        os._exit(0)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    # -----------------------
+
     try:
         # Start Connection
         fix_client.start()
@@ -157,16 +173,17 @@ def main():
         
         # Request Initial Positions - Wait for connection first
         logger.info("Waiting for Trade Session to be ready for Position Request...")
-        retries = 10
-        while not fix_client.trade_session.connected and retries > 0:
+        retries = 20
+        while not fix_client.trade_session.logged_on and retries > 0:
             time.sleep(1)
             retries -= 1
+            # Note: No need to check 'running' here if signal handler kills process
             
-        if fix_client.trade_session.connected:
+        if fix_client.trade_session.logged_on:
             fix_client.clear_state()
             fix_client.send_positions_request()
         else:
-            logger.error("Trade Session not connected after wait. Skipping initial position request.")
+            logger.error("Trade Session not logged on after wait. Skipping initial position request.")
 
         # Initial Subscription
         # Resolve initial symbols if they are names
@@ -206,13 +223,20 @@ def main():
                 market_open = now.replace(hour=config.MARKET_OPEN_HOUR, minute=config.MARKET_OPEN_MINUTE, second=0, microsecond=0)
                 market_close = now.replace(hour=config.MARKET_CLOSE_HOUR, minute=config.MARKET_CLOSE_MINUTE, second=0, microsecond=0)
                 
-                # Check for cross-midnight schedule
-                if market_open > market_close:
-                    # e.g. Open 07:00, Close 06:00 (next day)
-                    # Open if Now >= Open OR Now < Close
+                # Check for cross-midnight schedule (e.g. Open 07:00, Close 05:55 next day)
+                # In this case, Open > Close isn't strictly true if we just compare hours, 
+                # but semantically it is cross-day if Open is 7am and Close is 5am.
+                # However, if Close is 5am, it usually means the *next* day.
+                
+                if config.MARKET_OPEN_HOUR > config.MARKET_CLOSE_HOUR or \
+                   (config.MARKET_OPEN_HOUR == config.MARKET_CLOSE_HOUR and config.MARKET_OPEN_MINUTE > config.MARKET_CLOSE_MINUTE):
+                    # Cross-midnight: 
+                    # If it's 04:00 (before Close), it's open.
+                    # If it's 08:00 (after Open), it's open.
+                    # If it's 06:00 (between Close and Open), it's closed.
                     is_open = now >= market_open or now < market_close
                 else:
-                    # Standard day schedule
+                    # Standard day (e.g. 09:00 to 17:00)
                     is_open = market_open <= now < market_close
                 
                 if not is_open:
@@ -259,15 +283,15 @@ def main():
                     df = loader.get_latest_bars(symbol)
                     if df is not None and len(df) > 20:
                          # Run Strategy
-                         signal = strategy.check_signal(df)
-                         if signal:
+                         signal_data = strategy.check_signal(df, symbol)
+                         if signal_data:
                              symbol_name = fix_client.get_symbol_name(symbol)
-                             msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal['action']}\nReason: {signal['reason']}"
+                             msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal_data['action']}\nReason: {signal_data['reason']}"
                              logger.info(msg)
                              notifier.notify(msg)
                              
                              # Determine Side
-                             if signal['action'] == 'BUY_CALL':
+                             if signal_data['action'] == 'BUY_CALL':
                                  side = '1' # Buy
                                  opp_side = '2' # Sell
                                  bias = 1
@@ -332,6 +356,9 @@ def main():
         logger.critical(f"Fatal Startup Error: {e}")
         notifier.notify(f"❌ **FATAL ERROR**\nBot crashed:\n{e}")
         time.sleep(10) # Wait before exit to allow notification to send
+    finally:
+        logger.info("Cleaning up...")
+        fix_client.stop()
 
 
 def check_stop():
@@ -346,15 +373,17 @@ def check_stop():
     return False
 
 def smart_sleep(seconds):
-    """Sleep for `seconds` but check for stop signal every 1s."""
-    for _ in range(int(seconds)):
+    """Sleep for `seconds` but check for stop signal every 0.5s."""
+    for _ in range(int(seconds * 2)):
+        if not running: return True
         if check_stop():
             return True
-        time.sleep(1)
+        time.sleep(0.5)
     return False
 
 if __name__ == "__main__":
     main()
+
 
 # Need to update main() to use smart_sleep and check_stop
 # Since I can't easily jump around, I will provide a new main that uses these.

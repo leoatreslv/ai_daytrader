@@ -61,7 +61,8 @@ def test_strategy():
     signals = Indicators.check_signals(df)
     print(f"Signals: {signals}")
 
-    signal = strategy.check_signal(df)
+    test_symbol = "TEST_SYM"
+    signal = strategy.check_signal(df, test_symbol)
     
     print(f"Post-Check Bias: {strategy.current_bias}")
     print(f"Signal: {signal}")
@@ -77,7 +78,11 @@ def test_strategy():
     strategy.current_bias = "BEARISH"
     strategy.last_llm_check = pd.Timestamp.now() # Prevent update
     
-    signal = strategy.check_signal(df)
+    # We need a new candle or force clear state because we just consumed the signal for this candle above
+    # Let's clear state for this test
+    strategy.last_signal_times.clear()
+    
+    signal = strategy.check_signal(df, test_symbol)
     print(f"Signal (Expect None): {signal}")
     
     if signal is None:

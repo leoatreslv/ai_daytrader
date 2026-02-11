@@ -56,9 +56,22 @@ try:
     data = s.recv(4096)
     print(f"Received: {data}")
     
+    print(f"Received: {data}")
+    
     s.close()
+
+except KeyboardInterrupt:
+    print("\nTest interrupted by user.")
+    try:
+        s.close()
+    except:
+        pass
 
 except Exception as e:
     print(f"Error: {e}")
     import traceback
     traceback.print_exc()
+    try:
+        s.close()
+    except:
+        pass

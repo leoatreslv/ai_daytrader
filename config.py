@@ -28,10 +28,11 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Trading Parameters
 # Trading Parameters
-MARKET_OPEN_HOUR = int(os.getenv("MARKET_OPEN_HOUR", "9")) # 9 AM
-MARKET_OPEN_MINUTE = int(os.getenv("MARKET_OPEN_MINUTE", "30")) # 30 Min
-MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", "15")) # 3 PM
-MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", "50")) # 50 Min
+MARKET_OPEN_HOUR = int(os.getenv("MARKET_OPEN_HOUR", "7")) 
+MARKET_OPEN_MINUTE = int(os.getenv("MARKET_OPEN_MINUTE", "1"))
+MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", "5")) 
+MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", "55"))
+
 TARGET_SYMBOLS = ["41"] # XAUUSD (ID 41)
 # TARGET_SYMBOLS = ["1"] # cTrader Symbol IDs (e.g. 1 might be EURUSD, need to map SPY/NSA equivalent)
 # NOTE: cTrader uses integer Symbol IDs. User needs to find IDs for "US Indices".
@@ -41,13 +42,7 @@ TARGET_SYMBOLS = ["41"] # XAUUSD (ID 41)
 TRADE_QTY = 1000 
 RISK_REWARD_RATIO = 2.0
 STOP_LOSS_PCT = 0.005
-STOP_LOSS_PCT = 0.005
 TAKE_PROFIT_PCT = 0.01
 
 # Charting Configuration
 CHART_INTERVAL = int(os.getenv("CHART_INTERVAL", "7200")) # Default 2 hours
-
-MARKET_OPEN_HOUR = int(os.getenv("MARKET_OPEN_HOUR", "9"))
-MARKET_OPEN_MINUTE = int(os.getenv("MARKET_OPEN_MINUTE", "30"))
-MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", "15"))
-MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", "00"))
