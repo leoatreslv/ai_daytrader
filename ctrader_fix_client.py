@@ -395,9 +395,14 @@ class CTraderFixClient:
             ref_msg_type = msg.get(372)
             text = msg.get(58).decode() if msg.get(58) else "Unknown"
             reason = msg.get(380)
-            logger.error(f"[{source}] BUSINESS REJECT: Type={ref_msg_type}, Reason={reason}, Text={text}")
-            if self.notifier:
-                self.notifier.notify(f"🚫 **BUSINESS REJECT**\nReason: {text}")
+            
+            # Suppress notification for known "SecurityListRequestType" reject (we have fallback)
+            if b'SecurityListRequestType' in msg.get(58) or b'SecurityListRequestType' in (msg.get(380) or b''):
+                 logger.warning(f"[{source}] Security List Request not supported (using fallback): {text}")
+            else:
+                 logger.error(f"[{source}] BUSINESS REJECT: Type={ref_msg_type}, Reason={reason}, Text={text}")
+                 if self.notifier:
+                     self.notifier.notify(f"🚫 **BUSINESS REJECT**\nReason: {text}")
 
         elif msg_type == b'y': # Security List
              # cTrader sends 55=ID, 107=Description (Name)
@@ -564,28 +569,18 @@ class CTraderFixClient:
 
     def fetch_symbols(self):
         """Blocking call to fetch symbols."""
-        if not self.quote_session.connected:
-            logger.warning("Cannot fetch symbols: Quote session not connected.")
-            return
-
-        logger.info("Fetching symbol list...")
+        logger.info("Loading symbol list from Config...")
         self.symbol_map.clear()
         
-        # Try API Fetch
-        try:
-            self.send_security_list_request()
-            # Wait for symbols to populate
-            for _ in range(20): # Wait up to 10 seconds (increased from 5s)
-                if not self.quote_session.running: break
-                time.sleep(0.5)
-                if len(self.symbol_map) > 10: 
-                    break
-        except Exception as e:
-            logger.error(f"Error requesting symbol list: {e}")
-
-        # Fallback if API failed
+        # Load from config.SYMBOLS
+        if hasattr(config, 'SYMBOLS'):
+             # Ensure values are strings
+             for k,v in config.SYMBOLS.items():
+                 self.symbol_map[k] = str(v)
+        
+        # Fallback if Config failed or empty
         if len(self.symbol_map) == 0:
-            logger.warning("API Symbol fetch failed (or empty). Using Common Symbol Fallback.")
+            logger.warning("Config SYMBOLS empty. Using Common Symbol Fallback.")
             self.symbol_map.update(self.COMMON_SYMBOLS)
         
         logger.info(f"Loaded {len(self.symbol_map)} symbols.")

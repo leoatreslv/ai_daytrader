@@ -39,6 +39,13 @@ TARGET_SYMBOLS = ["41"] # XAUUSD (ID 41)
 # For Demo: EURUSD is often 1. User wants Indices. 
 # We'll need a mapping or lookup. For now, we will use a placeholder.
 
+# Common Symbols (Fallbacks)
+SYMBOLS = {
+    "EURUSD": "1", "GBPUSD": "2", "USDJPY": "4", "GBPJPY": "6", 
+    "AUDUSD": "9", "NZDUSD": "13", "USDCAD": "14", "USDCHF": "15",
+    "XAUUSD": "41", "ETHUSD": "1002", "BTCUSD": "1001"
+}
+
 TRADE_QTY = 1000 
 RISK_REWARD_RATIO = 2.0
 STOP_LOSS_PCT = 0.005
