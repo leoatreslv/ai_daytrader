@@ -237,6 +237,7 @@ class CTraderFixClient:
         # Tracking State (In-Memory)
         self.open_orders = {} # OrderID -> {Symbol, Side, Qty, Price}
         self.positions = {} # SymbolID -> {'long': 0.0, 'short': 0.0}
+        self.position_details = {} # PositionID -> {Symbol, Side, Qty}
         self.order_counter = 0
         self.lock = threading.RLock()
     
@@ -511,8 +512,9 @@ class CTraderFixClient:
                 sym = msg.get(55).decode() if msg.get(55) else "Unknown"
                 long_qty = float(msg.get(704).decode()) if msg.get(704) else 0.0
                 short_qty = float(msg.get(705).decode()) if msg.get(705) else 0.0
+                pos_id = msg.get(721).decode() if msg.get(721) else None # PositionID
                 
-                logger.info(f"Position Report for {sym}: Long={long_qty}, Short={short_qty}")
+                logger.info(f"Position Report for {sym}: Long={long_qty}, Short={short_qty}, ID={pos_id}")
                 
                 # Initialize format if not present
                 if sym not in self.positions:
@@ -522,7 +524,16 @@ class CTraderFixClient:
                 self.positions[sym]['long'] += long_qty
                 self.positions[sym]['short'] += short_qty
                 
-                logger.info(f"Updated Internal Position for {sym}: {self.positions[sym]}")
+                # Update Detailed Positions (Hedging)
+                if pos_id:
+                     details = {
+                         'symbol_id': sym,
+                         'qty': long_qty if long_qty > 0 else short_qty,
+                         'side': 'long' if long_qty > 0 else 'short',
+                         'position_id': pos_id
+                     }
+                     self.position_details[pos_id] = details
+                     logger.info(f"Updated Detail Position: {details}")
  
             except Exception as e:
                 logger.error(f"Error parsing Position Report: {e}")
@@ -534,6 +545,7 @@ class CTraderFixClient:
         """Clear internal state (Orders/Positions) before a sync."""
         self.open_orders.clear()
         self.positions.clear()
+        self.position_details.clear()
         logger.info("Internal state cleared.")
 
     def send_order_mass_status_request(self):
@@ -640,7 +652,7 @@ class CTraderFixClient:
         session._send_raw(msg)
 
         
-    def submit_order(self, symbol_id, qty, side, order_type='1', price=None, stop_px=None):
+    def submit_order(self, symbol_id, qty, side, order_type='1', price=None, stop_px=None, position_id=None):
         # New Order Single (D)
         # order_type: 1=Market, 2=Limit, 3=Stop, 4=StopLimit
         with self.lock:
@@ -665,4 +677,8 @@ class CTraderFixClient:
         if stop_px:
             msg.append_pair(99, stop_px) # StopPx (for Stop)
         
+        if position_id:
+            msg.append_pair(721, position_id) # PositionID for closing specific position in Hedging
+            logger.info(f"Attaching PositionID {position_id} to order.")
+            
         self.trade_session._send_raw(msg)
