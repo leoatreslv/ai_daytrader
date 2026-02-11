@@ -45,21 +45,48 @@ class TelegramProvider(NotificationProvider):
         except Exception as e:
             logger.error(f"Error registering Telegram commands: {e}")
 
+    def _send_request_with_retry(self, method, url, **kwargs):
+        """Helper to send requests with rate limit handling (429)."""
+        import time
+        max_retries = 3
+        
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.request(method, url, **kwargs)
+                
+                if response.status_code == 429:
+                    # Rate Limit Hit
+                    try:
+                        retry_after = response.json().get('parameters', {}).get('retry_after', 5)
+                    except:
+                        retry_after = 5
+                    
+                    logger.warning(f"Telegram Rate Limit detected. Sleeping for {retry_after}s...")
+                    time.sleep(retry_after + 1)
+                    continue # Retry
+                
+                return response
+                
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Telegram Network Error (Attempt {attempt+1}/{max_retries}): {e}")
+                time.sleep(2)
+        
+        return None
+
     def send_message(self, message: str):
         if not self.token or not self.chat_id:
             logger.warning("Telegram token or chat_id not set. Cannot send notification.")
             return
 
-        try:
-            payload = {
-                "chat_id": self.chat_id,
-                "text": message
-            }
-            response = requests.post(f"{self.base_url}/sendMessage", json=payload, timeout=5)
-            if response.status_code != 200:
-                logger.error(f"Telegram send failed: {response.text}")
-        except Exception as e:
-            logger.error(f"Telegram connection error: {e}")
+        payload = {
+            "chat_id": self.chat_id,
+            "text": message
+        }
+        
+        response = self._send_request_with_retry("POST", f"{self.base_url}/sendMessage", json=payload, timeout=10)
+        
+        if response and response.status_code != 200:
+            logger.error(f"Telegram send failed: {response.text}")
 
     def send_image(self, image_path: str, caption: str = ""):
         if not self.token or not self.chat_id:
@@ -69,9 +96,10 @@ class TelegramProvider(NotificationProvider):
             with open(image_path, 'rb') as photo:
                 payload = {"chat_id": self.chat_id, "caption": caption}
                 files = {"photo": photo}
-                response = requests.post(f"{self.base_url}/sendPhoto", data=payload, files=files, timeout=10)
                 
-                if response.status_code != 200:
+                response = self._send_request_with_retry("POST", f"{self.base_url}/sendPhoto", data=payload, files=files, timeout=20)
+                
+                if response and response.status_code != 200:
                     logger.error(f"Telegram send photo failed: {response.text}")
         except Exception as e:
             logger.error(f"Telegram photo error: {e}")
