@@ -582,6 +582,23 @@ class CTraderFixClient:
                 fill_px = msg.get(31).decode() if msg.get(31) else price
                 fill_qty = msg.get(32).decode() if msg.get(32) else qty
                 
+                # Validation & Fallback for Fill Price
+                fill_p = 0.0
+                try:
+                    fill_p = float(fill_px)
+                except ValueError:
+                    # If fill_px is 'Market' or non-numeric, try fallback
+                    logger.warning(f"ExReport: Fill Price is '{fill_px}', attempting fallback to latest market price.")
+                    
+                    # Try to resolve symbol ID to get latest price
+                    sym_id = self.get_symbol_id(symbol)
+                    if sym_id and sym_id in self.latest_prices:
+                        fill_p = float(self.latest_prices[sym_id])
+                        logger.info(f"Using latest market price {fill_p} for PnL estimation.")
+                        fill_px = str(fill_p) # Update for display/logging
+                    else:
+                        logger.warning(f"Could not find latest market price for fallback. PnL will be skipped.")
+                
                 # Plain text log
                 log_msg = f"ORDER FILLED: {side_str} {symbol} Qty: {fill_qty} @ {fill_px}"
                 logger.info(log_msg)
@@ -610,9 +627,10 @@ class CTraderFixClient:
                     is_short_close = (side == b'1') # Buying to close Short
                     
                     fill_val = float(fill_qty)
-                    fill_p = float(fill_px)
+                    # fill_p is already float from validation above
 
-                    # Check position cache
+                    if fill_p > 0:
+                        # Check position cache
                     # Note: Symbol ID is in 'symbol' variable (decoded), but positions keys might be strings
                     if symbol in self.positions:
                         pos_data = self.positions[symbol]
