@@ -614,25 +614,42 @@ class CTraderFixClient:
                 if self.notifier: self.notifier.notify(f"✅ **ORDER ACCEPTED**\n{side_str} {symbol} {qty}")
             
             elif exec_type == b'F': # Trade (Partial or Full Fill)
-                fill_px = msg.get(31).decode() if msg.get(31) else price
-                fill_qty = msg.get(32).decode() if msg.get(32) else qty
-                
                 # Validation & Fallback for Fill Price
                 fill_p = 0.0
                 try:
-                    fill_p = float(fill_px)
-                except ValueError:
-                    # If fill_px is 'Market' or non-numeric, try fallback
-                    logger.warning(f"ExReport: Fill Price is '{fill_px}', attempting fallback to latest market price.")
-                    
-                    # Try to resolve symbol ID to get latest price
-                    sym_id = self.get_symbol_id(symbol)
-                    if sym_id and sym_id in self.latest_prices:
-                        fill_p = float(self.latest_prices[sym_id])
-                        logger.info(f"Using latest market price {fill_p} for PnL estimation.")
-                        fill_px = str(fill_p) # Update for display/logging
+                    # Try LastPx (31), then AvgPx (6), then fallback to order price (44)
+                    fill_px_raw = msg.get(31) or msg.get(6)
+                    if fill_px_raw:
+                        fill_px = fill_px_raw.decode()
+                        fill_p = float(fill_px)
+                    elif price != "Market":
+                        fill_px = price
+                        fill_p = float(fill_px)
                     else:
-                        logger.warning(f"Could not find latest market price for fallback. PnL will be skipped.")
+                        raise ValueError("No numeric price found in message")
+                        
+                except (ValueError, TypeError):
+                    # If fill_px is 'Market' or missing, try fallback to latest known price
+                    logger.warning(f"ExReport: Fill Price is '{price}', attempting fallback to latest market price.")
+                    
+                    # Try direct ID match first (Symbol ID is usually in Tag 55)
+                    lookup_id = symbol
+                    if lookup_id in self.latest_prices:
+                        fill_p = float(self.latest_prices[lookup_id])
+                        logger.info(f"Using latest market price {fill_p} for PnL estimation (Direct ID Match).")
+                    else:
+                        # Try to resolve Name -> ID
+                        sym_id = self.get_symbol_id(symbol)
+                        if sym_id and sym_id in self.latest_prices:
+                            fill_p = float(self.latest_prices[sym_id])
+                            logger.info(f"Using latest market price {fill_p} for PnL estimation (Resolved ID).")
+                        else:
+                            logger.warning(f"Could not find latest market price for {symbol} (Tried ID and Name). PnL will be skipped.")
+                    
+                    if fill_p > 0:
+                        fill_px = str(fill_p)
+                    else:
+                        fill_px = "Market" # Fallback display
                 
                 # Plain text log
                 log_msg = f"ORDER FILLED: {side_str} {symbol} Qty: {fill_qty} @ {fill_px}"
