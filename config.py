@@ -56,4 +56,5 @@ CHART_INTERVAL = int(os.getenv("CHART_INTERVAL", "7200")) # Default 2 hours
 
 # Risk Management
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "1"))
+TIMEZONE_OFFSET = int(os.getenv("TIMEZONE_OFFSET", "0"))
 

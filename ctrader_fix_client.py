@@ -264,22 +264,30 @@ class CTraderFixClient:
             logger.error(f"Failed to save trades.json: {e}")
 
     def get_current_session_start(self):
-        """Calculate the start time of the current trading session (e.g. yesterday 23:01 if now is 06:00)."""
+        """Calculate the start time of the current trading session relative to user's timezone."""
         from datetime import datetime, timedelta
         import config
         
-        now = datetime.now()
+        # We assume the bot environment (Docker/Server) might be in UTC.
+        # We calculate local time for the user based on the offset.
+        now_utc = datetime.utcnow()
+        now_user_local = now_utc + timedelta(hours=config.TIMEZONE_OFFSET)
         
-        # Today's Open Time
-        open_time_today = now.replace(hour=config.MARKET_OPEN_HOUR, minute=config.MARKET_OPEN_MINUTE, second=0, microsecond=0)
+        # User defined Open Time in their local clock (e.g. 23:01)
+        open_time_local = now_user_local.replace(
+            hour=config.MARKET_OPEN_HOUR, 
+            minute=config.MARKET_OPEN_MINUTE, 
+            second=0, microsecond=0
+        )
         
-        # If now >= open_time_today, session started today.
-        # If now < open_time_today, session started yesterday (cross-midnight session).
-        # Example: Open 23:00. Now 06:00. 06 < 23 -> Started yesterday 23:00.
-        if now >= open_time_today:
-            return open_time_today
+        if now_user_local >= open_time_local:
+            session_start_local = open_time_local
         else:
-            return open_time_today - timedelta(days=1)
+            session_start_local = open_time_local - timedelta(days=1)
+            
+        # Convert this local session start back to UTC to compare with trade_history
+        # (Assuming trade_history is logged using UTC/system time).
+        return session_start_local - timedelta(hours=config.TIMEZONE_OFFSET)
 
     def get_daily_report(self):
         """Generate a report of trades executed in the current session."""
