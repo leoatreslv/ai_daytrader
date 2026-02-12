@@ -41,3 +41,5 @@ stop.txt
 # Editor
 .vscode/
 .idea/
+# Data
+trades.json

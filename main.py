@@ -98,7 +98,10 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
                     
                     # Give it a moment to populate, then confirm
                     time.sleep(3) 
-                    notifier.notify(f"✅ **SYNC COMPLETE**\n\n{fix_client.get_orders_string()}\n\n{fix_client.get_positions_string()}")
+                    notifier.notify(f"✅ **SYNC COMPLETE**\n\n{fix_client.get_orders_string()}\n\n{fix_client.get_position_pnl_string()}")
+
+                elif cmd == "/report":
+                    notifier.notify(fix_client.get_daily_report())
 
                 elif cmd == "/chart":
                     sym = active_symbols[0] if active_symbols else None
@@ -280,16 +283,10 @@ def main():
                 current_targets = list(active_symbols)
                 
                 # Check Global Position Limit
-                open_pos_count = fix_client.get_open_position_count()
-                if open_pos_count >= config.MAX_OPEN_POSITIONS:
-                     # Only log periodically to avoid spamming
-                     if time.time() % 60 < 2: 
-                         logger.info(f"Skipping strategy scan: Max Open Positions Reached ({open_pos_count}/{config.MAX_OPEN_POSITIONS})")
-                     
-                     if smart_sleep(1):
-                         running = False
-                         break
-                     continue
+                # Check Global Position Limit - MOVED inside signal
+                # open_pos_count = fix_client.get_open_position_count()
+                # if open_pos_count >= config.MAX_OPEN_POSITIONS:
+                #      ... continue
 
                 for symbol in current_targets:
                     df = loader.get_latest_bars(symbol)
@@ -301,6 +298,13 @@ def main():
                              msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal_data['action']}\nReason: {signal_data['reason']}"
                              logger.info(msg)
                              notifier.notify(msg)
+
+                             # Check Max Positions
+                             open_count = fix_client.get_open_position_count()
+                             if open_count >= config.MAX_OPEN_POSITIONS:
+                                 logger.warning(f"Skipping trade execution: Max Open Positions ({open_count}/{config.MAX_OPEN_POSITIONS})")
+                                 notifier.notify(f"⚠️ **TRADE SKIPPED**\nMax Open Positions Reached ({open_count}/{config.MAX_OPEN_POSITIONS})")
+                                 continue
                              
                              # Determine Side
                              if signal_data['action'] == 'BUY_CALL':

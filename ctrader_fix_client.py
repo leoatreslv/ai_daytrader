@@ -239,7 +239,81 @@ class CTraderFixClient:
         self.positions = {} # SymbolID -> {'long': 0.0, 'short': 0.0}
         self.position_details = {} # PositionID -> {Symbol, Side, Qty}
         self.order_counter = 0
+        self.trade_history = self._load_trades() # Load persistent history
         self.lock = threading.RLock()
+    
+    def _load_trades(self):
+        """Load trade history from JSON file."""
+        import json
+        import os
+        try:
+            if os.path.exists("trades.json"):
+                with open("trades.json", "r") as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load trades.json: {e}")
+        return []
+
+    def _save_trades(self):
+        """Save trade history to JSON file."""
+        import json
+        try:
+            with open("trades.json", "w") as f:
+                json.dump(self.trade_history, f, indent=4, default=str)
+        except Exception as e:
+            logger.error(f"Failed to save trades.json: {e}")
+
+    def get_daily_report(self):
+        """Generate a report of trades executed today."""
+        from datetime import datetime
+        
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        lines = [f"📊 **DAILY REPORT ({today_str})**"]
+        
+        daily_pnl = 0.0
+        trade_count = 0
+        
+        # Filter for today
+        # Stored format in JSON usually ISO string for datetime
+        
+        for trade in self.trade_history:
+            # Check date
+            t_time = trade.get('time')
+            if not t_time: continue
+            
+            # Simple string check if format is compatible
+            if t_time.startswith(today_str):
+                trade_count += 1
+                symbol = trade.get('symbol', 'Unknown')
+                side = trade.get('side', '?')
+                qty = trade.get('qty', 0)
+                price = trade.get('price', 0)
+                pnl = trade.get('pnl')
+                ord_type = trade.get('type', 'MARKET')
+                
+                # Format Line
+                # 13:45 | SELL XAUUSD 10 @ 2025.50 | +50.00 (TP)
+                time_part = t_time.split(' ')[1][:8] if ' ' in t_time else t_time
+                
+                pnl_str = "-"
+                if pnl is not None:
+                    try:
+                        val = float(pnl)
+                        daily_pnl += val
+                        icon = "🟢" if val >= 0 else "🔴"
+                        pnl_str = f"{icon} {val:.2f}"
+                    except:
+                        pass
+                
+                lines.append(f"{time_part} | {side} {symbol} {qty} @ {price} | {pnl_str} ({ord_type})")
+        
+        if trade_count == 0:
+            lines.append("No trades executed today.")
+        else:
+            icon_total = "🟢" if daily_pnl >= 0 else "🔴"
+            lines.append(f"\n**Total Daily PnL: {icon_total} {daily_pnl:.2f}**")
+            
+        return "\n".join(lines)
     
     def stop(self):
         """Stop all sessions."""
@@ -512,9 +586,73 @@ class CTraderFixClient:
                 log_msg = f"ORDER FILLED: {side_str} {symbol} Qty: {fill_qty} @ {fill_px}"
                 logger.info(log_msg)
                 
+                # Determine Order Type for Notification
+                ord_type = msg.get(40) # 1=Market, 2=Limit, 3=Stop
+                # If not in msg, try to find in open_orders (if we tracked it)
+                # But open_orders might be deleted by 'F' handling if we did that first? 
+                # Actually we don't delete from open_orders until we see 'Filled' status, but here we are in 'F'.
+                
+                title = "💰 **ORDER FILLED** 💰"
+                if ord_type == b'3':
+                    title = "🛡️ **STOP LOSS FILLED** 🛡️"
+                elif ord_type == b'2':
+                    title = "💰 **TAKE PROFIT / LIMIT FILLED** 💰"
+                elif ord_type == b'1':
+                    title = "🚀 **MARKET ORDER FILLED** 🚀"
+                
+                # Calculate Realized PnL
+                pnl_str = ""
+                realized_pnl = None
+                try:
+                    # Look up Entry Price from cached positions
+                    entry_px = 0.0
+                    is_long_close = (side == b'2') # Selling to close Long
+                    is_short_close = (side == b'1') # Buying to close Short
+                    
+                    fill_val = float(fill_qty)
+                    fill_p = float(fill_px)
+
+                    # Check position cache
+                    # Note: Symbol ID is in 'symbol' variable (decoded), but positions keys might be strings
+                    if symbol in self.positions:
+                        pos_data = self.positions[symbol]
+                        if is_long_close:
+                            entry_px = pos_data.get('long_avg_px', 0.0)
+                            if entry_px > 0:
+                                pnl = (fill_p - entry_px) * fill_val
+                                realized_pnl = pnl
+                                icon = "🟢" if pnl >= 0 else "🔴"
+                                pnl_str = f"\n**Realized PnL: {icon} {pnl:.2f}**"
+                        
+                        elif is_short_close:
+                            entry_px = pos_data.get('short_avg_px', 0.0)
+                            if entry_px > 0:
+                                pnl = (entry_px - fill_p) * fill_val
+                                realized_pnl = pnl
+                                icon = "🟢" if pnl >= 0 else "🔴"
+                                pnl_str = f"\n**Realized PnL: {icon} {pnl:.2f}**"
+                except Exception as e:
+                    logger.error(f"Error calculating Realized PnL: {e}")
+
+                # Save to History
+                try:
+                    trade_record = {
+                        'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'symbol': symbol,
+                        'side': side_str,
+                        'qty': fill_qty,
+                        'price': fill_px,
+                        'pnl': realized_pnl,
+                        'type': 'STOP' if ord_type == b'3' else 'LIMIT' if ord_type == b'2' else 'MARKET'
+                    }
+                    self.trade_history.append(trade_record)
+                    self._save_trades()
+                except Exception as e:
+                    logger.error(f"Error saving trade history: {e}")
+
                 # Rich text notification
                 if self.notifier: 
-                    notify_msg = f"💰 **ORDER FILLED** 💰\n{side_str} {symbol}\nQty: {fill_qty} @ {fill_px}"
+                    notify_msg = f"{title}\n{side_str} {symbol}\nQty: {fill_qty} @ {fill_px}{pnl_str}"
                     self.notifier.notify(notify_msg)
                 
                 # Update Net Position Tracking
