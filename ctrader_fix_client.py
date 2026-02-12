@@ -631,21 +631,20 @@ class CTraderFixClient:
 
                     if fill_p > 0:
                         # Check position cache
-                    # Note: Symbol ID is in 'symbol' variable (decoded), but positions keys might be strings
-                    if symbol in self.positions:
-                        pos_data = self.positions[symbol]
-                        if is_long_close:
-                            entry_px = pos_data.get('long_avg_px', 0.0)
-                            if entry_px > 0:
-                                pnl = (fill_p - entry_px) * fill_val
-                                realized_pnl = pnl
-                                icon = "🟢" if pnl >= 0 else "🔴"
-                                pnl_str = f"\n**Realized PnL: {icon} {pnl:.2f}**"
-                        
-                        elif is_short_close:
-                            entry_px = pos_data.get('short_avg_px', 0.0)
-                            if entry_px > 0:
-                                pnl = (entry_px - fill_p) * fill_val
+                        if symbol in self.positions:
+                            pos_data = self.positions[symbol]
+                            pnl = None
+                            
+                            if is_long_close:
+                                entry_px = pos_data.get('long_avg_px', 0.0)
+                                if entry_px > 0:
+                                    pnl = (fill_p - entry_px) * fill_val
+                            elif is_short_close:
+                                entry_px = pos_data.get('short_avg_px', 0.0)
+                                if entry_px > 0:
+                                    pnl = (entry_px - fill_p) * fill_val
+                            
+                            if pnl is not None:
                                 realized_pnl = pnl
                                 icon = "🟢" if pnl >= 0 else "🔴"
                                 pnl_str = f"\n**Realized PnL: {icon} {pnl:.2f}**"

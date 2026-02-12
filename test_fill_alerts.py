@@ -39,7 +39,7 @@ class TestFillAlerts(unittest.TestCase):
         args, _ = self.mock_notifier.notify.call_args
         notification = args[0]
         
-        print(f"\n[Test SL Fill]\n{notification}")
+        # print(f"\n[Test SL Fill]\n{notification}")
         
         self.assertIn("STOP LOSS FILLED", notification)
         self.assertIn("Realized PnL: 🔴 -100.00", notification)
@@ -62,12 +62,14 @@ class TestFillAlerts(unittest.TestCase):
         args, _ = self.mock_notifier.notify.call_args
         notification = args[0]
         
-        print(f"\n[Test TP Fill]\n{notification}")
+        # print(f"\n[Test TP Fill]\n{notification}")
         
         self.assertIn("TAKE PROFIT / LIMIT FILLED", notification)
         self.assertIn("Realized PnL: 🟢 100.00", notification)
 
 if __name__ == '__main__':
+    # Ensure UTF-8 output for Windows console
     import sys
-    sys.stdout.reconfigure(encoding='utf-8')
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
     unittest.main()
