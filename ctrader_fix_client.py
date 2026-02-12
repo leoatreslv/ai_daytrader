@@ -263,49 +263,84 @@ class CTraderFixClient:
         except Exception as e:
             logger.error(f"Failed to save trades.json: {e}")
 
+    def get_current_session_start(self):
+        """Calculate the start time of the current trading session (e.g. yesterday 23:01 if now is 06:00)."""
+        from datetime import datetime, timedelta
+        import config
+        
+        now = datetime.now()
+        
+        # Today's Open Time
+        open_time_today = now.replace(hour=config.MARKET_OPEN_HOUR, minute=config.MARKET_OPEN_MINUTE, second=0, microsecond=0)
+        
+        # If now >= open_time_today, session started today.
+        # If now < open_time_today, session started yesterday (cross-midnight session).
+        # Example: Open 23:00. Now 06:00. 06 < 23 -> Started yesterday 23:00.
+        if now >= open_time_today:
+            return open_time_today
+        else:
+            return open_time_today - timedelta(days=1)
+
     def get_daily_report(self):
-        """Generate a report of trades executed today."""
+        """Generate a report of trades executed in the current session."""
         from datetime import datetime
         
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        lines = [f"📊 **DAILY REPORT ({today_str})**"]
+        session_start = self.get_current_session_start()
+        session_str = session_start.strftime("%Y-%m-%d %H:%M")
+        
+        lines = [f"📊 **SESSION REPORT (since {session_str})**"]
         
         daily_pnl = 0.0
         trade_count = 0
         
-        # Filter for today
-        # Stored format in JSON usually ISO string for datetime
-        
         for trade in self.trade_history:
             # Check date
-            t_time = trade.get('time')
-            if not t_time: continue
+            t_time_str = trade.get('time')
+            if not t_time_str: continue
             
-            # Simple string check if format is compatible
-            if t_time.startswith(today_str):
-                trade_count += 1
-                symbol = trade.get('symbol', 'Unknown')
-                side = trade.get('side', '?')
-                qty = trade.get('qty', 0)
-                price = trade.get('price', 0)
-                pnl = trade.get('pnl')
-                ord_type = trade.get('type', 'MARKET')
+            try:
+                # Parse trade time
+                t_time = datetime.strptime(t_time_str, "%Y-%m-%d %H:%M:%S")
                 
-                # Format Line
-                # 13:45 | SELL XAUUSD 10 @ 2025.50 | +50.00 (TP)
-                time_part = t_time.split(' ')[1][:8] if ' ' in t_time else t_time
-                
-                pnl_str = "-"
-                if pnl is not None:
-                    try:
-                        val = float(pnl)
-                        daily_pnl += val
-                        icon = "🟢" if val >= 0 else "🔴"
-                        pnl_str = f"{icon} {val:.2f}"
-                    except:
-                        pass
-                
-                lines.append(f"{time_part} | {side} {symbol} {qty} @ {price} | {pnl_str} ({ord_type})")
+                # Filter: Trade must be after Session Start
+                if t_time < session_start:
+                    continue
+            except Exception as e:
+                continue
+
+            trade_count += 1
+            symbol = trade.get('symbol', 'Unknown')
+            side = trade.get('side', '?')
+            qty = trade.get('qty', 0)
+            price = trade.get('price', 0)
+            pnl = trade.get('pnl')
+            ord_type = trade.get('type', 'MARKET')
+            
+            # Format Line
+            time_part = t_time.strftime("%H:%M:%S")
+            
+            pnl_str = "-"
+            if pnl is not None:
+                try:
+                    pnl_val = float(pnl)
+                    daily_pnl += pnl_val
+                    icon = "🟢" if pnl_val >= 0 else "🔴"
+                    pnl_str = f"{icon} {pnl_val:.2f}"
+                except: pass
+            
+            type_icon = ""
+            if ord_type == 'STOP': type_icon = "(SL)"
+            elif ord_type == 'LIMIT': type_icon = "(TP)"
+            
+            lines.append(f"{time_part} | {side} {symbol} {qty} @ {price} | {pnl_str} {type_icon}")
+            
+        if trade_count == 0:
+            lines.append("🧘 **NO TRADES IN THIS SESSION**")
+        else:
+            icon = "🟢" if daily_pnl >= 0 else "🔴"
+            lines.append(f"\n**Session Net PnL: {icon} {daily_pnl:.2f}**")
+            
+        return "\n".join(lines)
         
         if trade_count == 0:
             lines.append("No trades executed today.")
