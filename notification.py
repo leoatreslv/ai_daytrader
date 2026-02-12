@@ -31,6 +31,7 @@ class TelegramProvider(NotificationProvider):
             {"command": "status", "description": "Check connection & active symbol"},
             {"command": "orders", "description": "List active orders"},
             {"command": "positions", "description": "List open positions"},
+            {"command": "report", "description": "Daily Trade Report"},
             {"command": "sync", "description": "Fetch active Orders/Positions from server"},
             {"command": "chart", "description": "Generate price chart"},
             {"command": "symbol", "description": "Switch instrument (e.g. /symbol 1)"},
