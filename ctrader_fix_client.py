@@ -238,6 +238,7 @@ class CTraderFixClient:
         self.open_orders = {} # OrderID -> {Symbol, Side, Qty, Price}
         self.positions = {} # SymbolID -> {'long': 0.0, 'short': 0.0}
         self.position_details = {} # PositionID -> {Symbol, Side, Qty}
+        self.pending_protections = {} # ClOrdID -> {sl: price, tp: price}
         self.order_counter = 0
         self.trade_history = self._load_trades() # Load persistent history
         self.lock = threading.RLock()
@@ -609,6 +610,7 @@ class CTraderFixClient:
             exec_type = msg.get(150) # 0=New, F=Trade, 8=Rejected
             ord_status = msg.get(39) # 0=New, 1=PartiallyFilled, 2=Filled, 8=Rejected
             order_id = msg.get(37).decode() if msg.get(37) else "Unknown"
+            cl_ord_id = msg.get(11).decode() if msg.get(11) else None
             symbol = msg.get(55).decode() if msg.get(55) else "Unknown"
             side = msg.get(54) # 1=Buy, 2=Sell
             side_str = "BUY" if side == b'1' else "SELL"
@@ -625,6 +627,8 @@ class CTraderFixClient:
                 if self.notifier: self.notifier.notify(f"✅ **ORDER ACCEPTED**\n{side_str} {symbol} {qty}")
             
             elif exec_type == b'F': # Trade (Partial or Full Fill)
+                pos_id = msg.get(721).decode() if msg.get(721) else None # PositionID
+                
                 # Validation & Fallback for Fill Price
                 fill_p = 0.0
                 try:
@@ -755,8 +759,32 @@ class CTraderFixClient:
                 except Exception as e:
                     logger.error(f"Error updating position from execution report: {e}")
 
+                # Automatic SL/TP Protection Submission (Linked to PositionID)
+                if pos_id and cl_ord_id in self.pending_protections:
+                    prot = self.pending_protections.pop(cl_ord_id)
+                    logger.info(f"Applying pending protections for Position {pos_id} (from {cl_ord_id})")
+                    
+                    # Side for protection is opposite to entry
+                    prot_side = "2" if prot['side'] == "1" else "1"
+                    
+                    if prot['sl']:
+                        logger.info(f"Submitting Linked SL: {prot['sl']} for Position {pos_id}")
+                        self.submit_order(
+                            prot['symbol_id'], prot['qty'], prot_side, 
+                            order_type='3', stop_px=prot['sl'], position_id=pos_id
+                        )
+                    
+                    if prot['tp']:
+                        logger.info(f"Submitting Linked TP: {prot['tp']} for Position {pos_id}")
+                        self.submit_order(
+                            prot['symbol_id'], prot['qty'], prot_side, 
+                            order_type='2', price=prot['tp'], position_id=pos_id
+                        )
                 
             elif exec_type == b'8': # Rejected
+                if cl_ord_id in self.pending_protections:
+                    del self.pending_protections[cl_ord_id]
+                    
                 if order_id in self.open_orders:
                     del self.open_orders[order_id]
                 
@@ -1039,12 +1067,17 @@ class CTraderFixClient:
             msg.append_pair(721, position_id) # PositionID for closing specific position in Hedging
             logger.info(f"Attaching PositionID {position_id} to order.")
 
-        # cTrader Protection Tags (Absolute Prices)
-        if tp_price:
-            msg.append_pair(1001, tp_price) # Absolute Take Profit
-            logger.info(f"Attaching TP Protection: {tp_price}")
-        if sl_price:
-            msg.append_pair(1002, sl_price) # Absolute Stop Loss
-            logger.info(f"Attaching SL Protection: {sl_price}")
+        # If SL/TP are provided for a New Order (order_type '1'), cache them for post-fill linking.
+        # Inline tags 1001/1002 are not supported by some brokers (e.g. Pepperstone).
+        if order_type == '1' and (sl_price or tp_price):
+            self.pending_protections[cls_ord_id] = {
+                'sl': sl_price,
+                'tp': tp_price,
+                'qty': qty,
+                'symbol_id': symbol_id,
+                'side': side
+            }
+            logger.info(f"Cached pending protections for {cls_ord_id}")
             
         self.trade_session._send_raw(msg)
+        return cls_ord_id # Return ID for tracking

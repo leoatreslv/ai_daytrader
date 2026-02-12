@@ -14,3 +14,6 @@
 - [x] Verify `/report` shows the correct session start date <!-- id: 11 -->
 - [x] Register `/report` command in Telegram Bot Menu <!-- id: 12 -->
 - [x] Push all fixes and verification tools to GitHub <!-- id: 13 -->
+- [x] Revert Tags 1001/1002 and implement `pending_protections` cache <!-- id: 14 -->
+- [x] Implement automatic SL/TP submission on ExecutionReport Fill with `PositionID` <!-- id: 15 -->
+- [x] Verify separate linked protections appear correctly in cTrader terminal <!-- id: 16 -->
