@@ -982,7 +982,7 @@ class CTraderFixClient:
         session._send_raw(msg)
 
         
-    def submit_order(self, symbol_id, qty, side, order_type='1', price=None, stop_px=None, position_id=None):
+    def submit_order(self, symbol_id, qty, side, order_type='1', price=None, stop_px=None, position_id=None, sl_price=None, tp_price=None):
         # New Order Single (D)
         # order_type: 1=Market, 2=Limit, 3=Stop, 4=StopLimit
         with self.lock:
@@ -1010,5 +1010,13 @@ class CTraderFixClient:
         if position_id:
             msg.append_pair(721, position_id) # PositionID for closing specific position in Hedging
             logger.info(f"Attaching PositionID {position_id} to order.")
+
+        # cTrader Protection Tags (Absolute Prices)
+        if tp_price:
+            msg.append_pair(1001, tp_price) # Absolute Take Profit
+            logger.info(f"Attaching TP Protection: {tp_price}")
+        if sl_price:
+            msg.append_pair(1002, sl_price) # Absolute Stop Loss
+            logger.info(f"Attaching SL Protection: {sl_price}")
             
         self.trade_session._send_raw(msg)

@@ -305,33 +305,16 @@ def main():
                              msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal_data['action']}\nReason: {signal_data['reason']}"
                              logger.info(msg)
                              notifier.notify(msg)
-
-                             # Check Max Positions
-                             open_count = fix_client.get_open_position_count()
-                             if open_count >= config.MAX_OPEN_POSITIONS:
-                                 logger.warning(f"Skipping trade execution: Max Open Positions ({open_count}/{config.MAX_OPEN_POSITIONS})")
-                                 notifier.notify(f"⚠️ **TRADE SKIPPED**\nMax Open Positions Reached ({open_count}/{config.MAX_OPEN_POSITIONS})")
-                                 continue
                              
                              # Determine Side
                              if signal_data['action'] == 'BUY_CALL':
                                  side = '1' # Buy
                                  opp_side = '2' # Sell
-                                 bias = 1
                              else:
                                  side = '2' # Sell
                                  opp_side = '1' # Buy
-                                 bias = -1
                              
-                             # Execute Entry (Market)
-                             # Use timestamp for unique ClOrdID to avoid duplicates
-                             fix_client.submit_order(symbol, config.TRADE_QTY, side, order_type='1')
-                             
-                             entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol_name}"
-                             logger.info(entry_msg)
-                             notifier.notify(entry_msg)
-                             
-                             # Calculate Risk
+                             # Calculate Risk Levels
                              current_price = df.iloc[-1]['close']
                              stop_dist = current_price * config.STOP_LOSS_PCT
                              tp_dist = current_price * config.TAKE_PROFIT_PCT
@@ -342,15 +325,24 @@ def main():
                              else: # Short
                                  sl_price = current_price + stop_dist
                                  tp_price = current_price - tp_dist
-                                 
-                             # Protection
+                             
+                             # Execute Entry with Linked Protections (Tags 1001, 1002)
                              # XAUUSD usually requires 2 decimal places
-                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='3', stop_px=f"{sl_price:.2f}")
-                             fix_client.submit_order(symbol, config.TRADE_QTY, opp_side, order_type='2', price=f"{tp_price:.2f}")
+                             sl_str = f"{sl_price:.2f}"
+                             tp_str = f"{tp_price:.2f}"
                              
-                             notifier.notify(f"🛡️ **PROTECTION PLACED**\nSL: {sl_price:.2f}\nTP: {tp_price:.2f}")
+                             fix_client.submit_order(
+                                 symbol, config.TRADE_QTY, side, 
+                                 order_type='1', 
+                                 sl_price=sl_str, 
+                                 tp_price=tp_str
+                             )
                              
-                             if smart_sleep(60):
+                             entry_msg = f"🚀 **ORDER PLACED** 🚀\nSide: {'BUY' if side=='1' else 'SELL'}\nQty: {config.TRADE_QTY}\nSymbol: {symbol_name}\nSL: {sl_str}\nTP: {tp_str}"
+                             logger.info(entry_msg)
+                             notifier.notify(entry_msg)
+                             
+                             if smart_sleep(10): # Shorter wait after entry
                                  running = False
                                  break
                 
