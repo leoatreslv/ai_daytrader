@@ -291,12 +291,15 @@ class CTraderFixClient:
 
     def get_daily_report(self):
         """Generate a report of trades executed in the current session."""
-        from datetime import datetime
+        from datetime import datetime, timedelta
+        import config
         
-        session_start = self.get_current_session_start()
-        session_str = session_start.strftime("%Y-%m-%d %H:%M")
+        session_start_utc = self.get_current_session_start()
+        # Convert to local for display
+        session_start_local = session_start_utc + timedelta(hours=config.TIMEZONE_OFFSET)
+        session_str = session_start_local.strftime("%Y-%m-%d %H:%M")
         
-        lines = [f"📊 **SESSION REPORT (since {session_str})**"]
+        lines = [f"📊 **SESSION REPORT (since {session_str} Local)**"]
         
         daily_pnl = 0.0
         trade_count = 0
@@ -311,7 +314,7 @@ class CTraderFixClient:
                 t_time = datetime.strptime(t_time_str, "%Y-%m-%d %H:%M:%S")
                 
                 # Filter: Trade must be after Session Start
-                if t_time < session_start:
+                if t_time < session_start_utc:
                     continue
             except Exception as e:
                 continue
