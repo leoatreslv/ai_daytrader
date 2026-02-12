@@ -1,54 +1,16 @@
+# Task: Trading Enhancements and Bug Fixes
 
-- [x] Run `test_socket.py` to verify basic connectivity
-- [x] Check `main.py` for `CTraderFixClient` integration
-- [x] Run `main.py` or create a test script for `CTraderFixClient`
-- [x] Verify Market Data subscription
-- [x] Verify Order Submission
-- [x] Implement LLM Bias in `strategy.py`
-    - [x] Implement `update_llm_bias`
-    - [x] Update `check_signal` with bias logic
-- [x] Verify LLM Bias integration
-- [x] Implement Common Logging
-    - [x] Create `logger.py`
-    - [x] Integrate logger into `llm_client.py`
-    - [x] Integrate logger into `strategy.py`
-    - [x] Integrate logger into `ctrader_fix_client.py`
-    - [x] Integrate logger into `main.py`
-- [x] Improve Termination Logic
-    - [x] Refactor `main.py` to use interruptible sleep
-    - [x] Create `stop.txt` to force stop existing process
-- [x] Linux Portability (Docker)
-    - [x] Create `Dockerfile`
-    - [x] Create `docker-compose.yml`
-    - [x] Add `.dockerignore`
-- [x] Push to GitHub
-    - [x] Initialize Git
-    - [x] Create `.gitignore`
-    - [x] Commit and Push
-- [x] Fix Docker Logging
-    - [x] Redirect logs to `logs/` directory
-    - [x] Fix `docker-compose.yml` volume mount
-    - [x] Push updates to GitHub
-- [x] Fix Docker SSL Connection
-    - [x] Install `ca-certificates` and `openssl` in Dockerfile
-    - [x] Update certificates
-    - [x] Relax SSL Context (SECLEVEL=1)
-    - [x] Push updates to GitHub
-- [x] Fix Docker SSL (Legacy Image)
-    - [x] Switch Dockerfile to `python:3.11-slim-bullseye`
-    - [x] Push updates to GitHub
-- [x] Fix Docker Dependencies (Pandas TA)
-    - [x] Add `git` to Dockerfile
-    - [x] Update `requirements.txt` for git install
-    - [x] Update `requirements.txt` for zip install (Correct URL)
-    - [x] Switch to `pandas-ta-remake` (Repo Gone)
-    - [x] Upgrade `setuptools` and `wheel` in Dockerfile
-    - [x] Force binary install for `pandas`/`numpy` in Dockerfile
-    - [x] Disable build isolation in Dockerfile
-    - [x] Remove conflicting `pandas`/`numpy` from requirements.txt
-    - [x] Revert to standard `pandas_ta` (Fix Import Error)
-    - [x] Switch back to `pandas-ta-remake` + Robust Import
-    - [x] Push updates to GitHub
-- [x] Fix Docker Runtime Error (pkg_resources)
-    - [x] Add `setuptools` to `requirements.txt`
-    - [x] Push updates to GitHub
+- [x] Analyze `main.py` and `config.py` for current position limit implementation <!-- id: 0 -->
+- [x] Implement robust position limit check in `main.py` <!-- id: 1 -->
+- [x] Investigate why TP/SL orders aren't executing as expected <!-- id: 2 -->
+- [x] Update TP/SL logic to use `PositionID` for Hedging accounts <!-- id: 3 -->
+- [x] Implement Stop Loss and Take Profit as linked protections or Closing orders <!-- id: 4 -->
+- [x] Verify both fixes in a demo environment <!-- id: 5 -->
+- [x] Improve Fill Price extraction in ExecutionReport (check Tag 6) <!-- id: 6 -->
+- [x] Fix Market Price fallback logic (handle direct ID matching) <!-- id: 7 -->
+- [x] Verify PnL calculation works for Market Orders <!-- id: 8 -->
+- [x] Add `TIMEZONE_OFFSET` to `config.py` <!-- id: 9 -->
+- [x] Fix `get_current_session_start` date calculation lag in `ctrader_fix_client.py` <!-- id: 10 -->
+- [x] Verify `/report` shows the correct session start date <!-- id: 11 -->
+- [x] Register `/report` command in Telegram Bot Menu <!-- id: 12 -->
+- [x] Push all fixes and verification tools to GitHub <!-- id: 13 -->
