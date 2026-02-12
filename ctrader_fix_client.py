@@ -308,6 +308,77 @@ class CTraderFixClient:
         if not has_pos:
             return "🧘 **NO OPEN POSITIONS**"
             
+        if not has_pos:
+            return "🧘 **NO OPEN POSITIONS**"
+            
+        return "\n".join(lines)
+
+    def get_open_position_count(self):
+        """Count number of symbols with active open positions."""
+        count = 0
+        for pos_data in self.positions.values():
+            if pos_data.get('long', 0.0) > 0 or pos_data.get('short', 0.0) > 0:
+                count += 1
+        return count
+
+    def get_position_pnl_string(self):
+        """Get string representation of positions with estimated PnL."""
+        if not self.positions:
+            return "🧘 **NO OPEN POSITIONS**"
+            
+        lines = ["💼 **CURRENT POSITIONS (w/ Approx PnL)**"]
+        has_pos = False
+        total_pnl_points = 0.0
+        
+        for sym_id, pos_data in self.positions.items():
+            long_qty = pos_data.get('long', 0.0)
+            short_qty = pos_data.get('short', 0.0)
+            entry_px_long = pos_data.get('long_avg_px', 0.0)
+            entry_px_short = pos_data.get('short_avg_px', 0.0)
+            
+            if long_qty == 0 and short_qty == 0: continue
+            has_pos = True
+            
+            # Try to resolve name
+            sym_name = sym_id
+            for name, sid in self.symbol_map.items():
+                if sid == str(sym_id):
+                    sym_name = name
+                    break
+            
+            current_price = self.latest_prices.get(str(sym_id))
+            
+            if long_qty > 0:
+                pnl_str = ""
+                if current_price and entry_px_long > 0:
+                    raw_diff = current_price - entry_px_long
+                    # Estimate PnL (Points * Qty) - Very rough
+                    # For XAUUSD (0.01 tick), if diff is 1.00, that's 100 pips?
+                    # Let's just show price diff * qty for now
+                    pnl_val = raw_diff * long_qty
+                    total_pnl_points += pnl_val
+                    icon = "🟢" if pnl_val >= 0 else "🔴"
+                    pnl_str = f" | PnL: {icon} {pnl_val:.2f}"
+                
+                lines.append(f"- {sym_name}: LONG {long_qty} @ {entry_px_long:.4f}{pnl_str}")
+
+            if short_qty > 0:
+                pnl_str = ""
+                if current_price and entry_px_short > 0:
+                    raw_diff = entry_px_short - current_price
+                    pnl_val = raw_diff * short_qty
+                    total_pnl_points += pnl_val
+                    icon = "🟢" if pnl_val >= 0 else "🔴"
+                    pnl_str = f" | PnL: {icon} {pnl_val:.2f}"
+                
+                lines.append(f"- {sym_name}: SHORT {short_qty} @ {entry_px_short:.4f}{pnl_str}")
+            
+        if not has_pos:
+            return "🧘 **NO OPEN POSITIONS**"
+            
+        # Total PnL (Estimation)
+        lines.append(f"\nΣ Est. Net PnL (Points): {total_pnl_points:.2f}")
+            
         return "\n".join(lines)
         
     def handle_market_data(self, symbol_id, price):
@@ -514,15 +585,83 @@ class CTraderFixClient:
                 short_qty = float(msg.get(705).decode()) if msg.get(705) else 0.0
                 pos_id = msg.get(721).decode() if msg.get(721) else None # PositionID
                 
-                logger.info(f"Position Report for {sym}: Long={long_qty}, Short={short_qty}, ID={pos_id}")
+                # Entry Price (AvgPx) from Tag 731 (SettlPrice), 44 (Price) or 31 (LastPx)?
+                # Standard Position Report (AP) often uses Tag 731 for SettlPrice (Mark-to-Market)
+                # or Tag 730 (SettlPrice)
+                # Let's check available tags in typical cTrader AP response.
+                # Assuming Tag 31 (LastPx) might be used for 'AvgPx' if not explicit.
+                # However, Tag 730 is standard 'SettlPrice'.
+                # Let's try to grab whatever looks like price.
+                # Tag 731 is often used for SettlPriceType.
+                # Tag 730 is SettlPrice.
+                # But for 'Entry Price', we want avg cost.
+                # cTrader FIX API: PositionReport -> No explicit 'Entry Price' tag in standard?
+                # Actually, standard FIX 4.4 Position Report has 'SettlPrice' (730).
+                # But 'AvgPx' might be in Tag 6 (AvgPx) IF provided?
+                # Let's try 730 (SettlPrice) as best proxy or see if 31 is there.
+                
+                # For now, let's use a placeholder if we can't find it, or log it.
+                # Let's try to extract Price (44) if present, or SettlPrice (730).
+                entry_px = 0.0
+                if msg.get(730):
+                    entry_px = float(msg.get(730).decode())
+                elif msg.get(44):
+                    entry_px = float(msg.get(44).decode())
+                
+                # Since Position Report splits Long/Short, it might give One Price?
+                # Usually LongQty and ShortQty are reported. 
+                # If both exist, the Price applies to... net? or one side?
+                # Does AP report separate entries for Long vs Short or one combined?
+                # If msg has LongQty=X and ShortQty=Y, it usually means 'Net' report or 'Position' report.
+                # If we get separate reports per position ID, we get specific prices.
+                
+                logger.info(f"Position Report for {sym}: Long={long_qty}, Short={short_qty}, ID={pos_id}, Px={entry_px}")
                 
                 # Initialize format if not present
                 if sym not in self.positions:
-                    self.positions[sym] = {'long': 0.0, 'short': 0.0}
+                    self.positions[sym] = {
+                        'long': 0.0, 'short': 0.0, 
+                        'long_avg_px': 0.0, 'short_avg_px': 0.0
+                    }
                     
-                # Accumulate (since we might receive multiple reports)
-                self.positions[sym]['long'] += long_qty
-                self.positions[sym]['short'] += short_qty
+                # Update logic
+                # If this is a snapshot update, we replace or accumulate?
+                # "Position Report" is usually a snapshot of current state for that ID/Symbol.
+                # If we rely on clearing state before request, we can just set it.
+                # But Position Reports come per PositionID in hedging?
+                
+                # Simplified aggregation:
+                # We need to compute Weighted Avg Price if we are aggregating multiple position IDs
+                # Current 'positions' dict aggregates by Symbol.
+                # If we get multiple Position IDs for same symbol (Hedging), we need to average.
+                
+                curr_long = self.positions[sym]['long']
+                curr_short = self.positions[sym]['short']
+                curr_long_px = self.positions[sym].get('long_avg_px', 0.0)
+                curr_short_px = self.positions[sym].get('short_avg_px', 0.0)
+                
+                # If we are clearing state before request, we start from 0.
+                # But if we receive partial updates...
+                # Assuming "Clear & Request" flow used in main.py:
+                # self.positions is cleared. Then we receive N reports.
+                
+                # Re-calculating weighted average:
+                # New Long Qty = curr_long + long_qty
+                # New Long Px = ((curr_long * curr_long_px) + (long_qty * entry_px)) / (curr_long + long_qty)
+                
+                if long_qty > 0:
+                     new_total = curr_long + long_qty
+                     if new_total > 0:
+                         avg_px = ((curr_long * curr_long_px) + (long_qty * entry_px)) / new_total
+                         self.positions[sym]['long'] = new_total
+                         self.positions[sym]['long_avg_px'] = avg_px
+                
+                if short_qty > 0:
+                     new_total = curr_short + short_qty
+                     if new_total > 0:
+                         avg_px = ((curr_short * curr_short_px) + (short_qty * entry_px)) / new_total
+                         self.positions[sym]['short'] = new_total
+                         self.positions[sym]['short_avg_px'] = avg_px
                 
                 # Update Detailed Positions (Hedging)
                 if pos_id:
@@ -530,6 +669,7 @@ class CTraderFixClient:
                          'symbol_id': sym,
                          'qty': long_qty if long_qty > 0 else short_qty,
                          'side': 'long' if long_qty > 0 else 'short',
+                         'entry_price': entry_px,
                          'position_id': pos_id
                      }
                      self.position_details[pos_id] = details

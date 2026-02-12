@@ -53,3 +53,7 @@ TAKE_PROFIT_PCT = 0.01
 
 # Charting Configuration
 CHART_INTERVAL = int(os.getenv("CHART_INTERVAL", "7200")) # Default 2 hours
+
+# Risk Management
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "1"))
+

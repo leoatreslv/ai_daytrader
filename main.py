@@ -88,7 +88,7 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
                     notifier.notify(fix_client.get_orders_string())
 
                 elif cmd in ["/positions", "/pos"]:
-                    notifier.notify(fix_client.get_positions_string())
+                    notifier.notify(fix_client.get_position_pnl_string())
 
                 elif cmd == "/sync":
                     notifier.notify("🔄 **SYNCING STATE**\nClearing local cache & Requesting fresh data...")
@@ -279,6 +279,18 @@ def main():
                 # Use copy of active_symbols to handle dynamic changes safely
                 current_targets = list(active_symbols)
                 
+                # Check Global Position Limit
+                open_pos_count = fix_client.get_open_position_count()
+                if open_pos_count >= config.MAX_OPEN_POSITIONS:
+                     # Only log periodically to avoid spamming
+                     if time.time() % 60 < 2: 
+                         logger.info(f"Skipping strategy scan: Max Open Positions Reached ({open_pos_count}/{config.MAX_OPEN_POSITIONS})")
+                     
+                     if smart_sleep(1):
+                         running = False
+                         break
+                     continue
+
                 for symbol in current_targets:
                     df = loader.get_latest_bars(symbol)
                     if df is not None and len(df) > 20:
