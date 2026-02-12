@@ -82,7 +82,7 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
                     notifier.notify(msg)
                 
                 elif cmd == "/help":
-                    notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/orders` - List active orders\n`/positions` - List open positions\n`/sync` - Manual State Sync\n`/chart` - Generate Price Chart\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
+                    notifier.notify(f"🤖 **AVAILABLE COMMANDS**\n`/status` - Check connection\n`/orders` - List active orders\n`/positions` - List open positions\n`/report` - Daily Trade Report\n`/sync` - Manual State Sync\n`/chart` - Generate Price Chart\n`/symbol <id>` - Switch instrument\n`/help` - Show this menu")
                 
                 elif cmd == "/orders":
                     notifier.notify(fix_client.get_orders_string())
