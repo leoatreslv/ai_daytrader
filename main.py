@@ -144,6 +144,7 @@ def main():
     # Log Configuration (Safe)
     logger.info(f"CONFIG: Market Hours: {config.MARKET_OPEN_HOUR}:{config.MARKET_OPEN_MINUTE:02d} - {config.MARKET_CLOSE_HOUR}:{config.MARKET_CLOSE_MINUTE:02d}")
     logger.info(f"CONFIG: Chart Interval: {config.CHART_INTERVAL}s")
+    logger.info(f"CONFIG: Trade Qty: {config.TRADE_QTY} Units")
     logger.info(f"CONFIG: Max Open Positions: {config.MAX_OPEN_POSITIONS}")
     logger.info(f"CONFIG: CompID: {config.CT_SENDER_COMP_ID} -> {config.CT_TARGET_COMP_ID}")
     
