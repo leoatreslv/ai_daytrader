@@ -435,8 +435,12 @@ class CTraderFixClient:
         return "\n".join(lines)
 
     def get_open_position_count(self):
-        """Count total number of open trades (Position IDs)."""
-        return len(self.position_details)
+        """Count total number of open trades based on active symbols."""
+        count = 0
+        for pos_data in self.positions.values():
+            if pos_data.get('long', 0) > 0: count += 1
+            if pos_data.get('short', 0) > 0: count += 1
+        return count
 
     def get_position_pnl_string(self):
         """Get string representation of positions with estimated PnL."""
@@ -616,12 +620,13 @@ class CTraderFixClient:
             
             if exec_type == b'0': # New
                 logger.info(f"[{source}] Order Accepted: {side_str} {symbol} {qty}")
-                # Add to Open Orders Tracking
+                # Save ClOrdID for potential cancellation (OCO)
                 pos_id = msg.get(721).decode() if msg.get(721) else None
                 self.open_orders[order_id] = {
                     "symbol": symbol, "side": side_str, "qty": qty, "price": price,
                     "position_id": pos_id, 
-                    "ord_type": msg.get(40).decode() if msg.get(40) else '1'
+                    "ord_type": msg.get(40).decode() if msg.get(40) else '1',
+                    "cl_ord_id": cl_ord_id # STORE CLORDID
                 }
                 if self.notifier: self.notifier.notify(f"✅ **ORDER ACCEPTED**\n{side_str} {symbol} {qty}")
             
@@ -674,15 +679,20 @@ class CTraderFixClient:
                 
                 # Determine Order Type for Notification
                 ord_type = msg.get(40) # 1=Market, 2=Limit, 3=Stop
-                # If not in msg, try to find in open_orders (if we tracked it)
-                # But open_orders might be deleted by 'F' handling if we did that first? 
-                # Actually we don't delete from open_orders until we see 'Filled' status, but here we are in 'F'.
-                
+                # If not in msg, try to find in open_orders (if tracked)
+                original_order_type = '1' # Default Market
+                if order_id in self.open_orders:
+                     original_order_type = self.open_orders[order_id].get('ord_type', '1')
+                     
                 title = "💰 **ORDER FILLED** 💰"
-                if ord_type == b'3':
+                is_protection_fill = False
+                
+                if ord_type == b'3' or original_order_type == '3':
                     title = "🛡️ **STOP LOSS FILLED** 🛡️"
-                elif ord_type == b'2':
+                    is_protection_fill = True
+                elif ord_type == b'2' or original_order_type == '2':
                     title = "💰 **TAKE PROFIT / LIMIT FILLED** 💰"
+                    is_protection_fill = True
                 elif ord_type == b'1':
                     title = "🚀 **MARKET ORDER FILLED** 🚀"
                 
@@ -717,6 +727,24 @@ class CTraderFixClient:
                                 realized_pnl = pnl
                                 icon = "🟢" if pnl >= 0 else "🔴"
                                 pnl_str = f"\n**Realized PnL: {icon} {pnl:.2f}**"
+                    
+                    # FIFO Fallback if cache missed
+                    if realized_pnl is None:
+                         # Try finding last open trade
+                         fifo_entry_px = self._get_fifo_entry_price(symbol, side_str)
+                         if fifo_entry_px > 0:
+                             logger.info(f"PnL: Cache miss. Used FIFO Fallback Entry Price: {fifo_entry_px}")
+                             if is_long_close:
+                                 realized_pnl = (fill_p - fifo_entry_px) * fill_val
+                             elif is_short_close:
+                                 realized_pnl = (fifo_entry_px - fill_p) * fill_val
+                             
+                             if realized_pnl is not None:
+                                 icon = "🟢" if realized_pnl >= 0 else "🔴"
+                                 pnl_str = f"\n**Realized PnL (FIFO): {icon} {realized_pnl:.2f}**"
+                         else:
+                             logger.warning("PnL: Cache miss and FIFO lookup failed. PnL not calculated.")
+                             
                 except Exception as e:
                     logger.error(f"Error calculating Realized PnL: {e}")
 
@@ -729,7 +757,7 @@ class CTraderFixClient:
                         'qty': fill_qty,
                         'price': fill_px,
                         'pnl': realized_pnl,
-                        'type': 'STOP' if ord_type == b'3' else 'LIMIT' if ord_type == b'2' else 'MARKET'
+                        'type': 'STOP' if (ord_type == b'3' or original_order_type == '3') else 'LIMIT' if (ord_type == b'2' or original_order_type == '2') else 'MARKET'
                     }
                     self.trade_history.append(trade_record)
                     self._save_trades()
@@ -741,23 +769,26 @@ class CTraderFixClient:
                     notify_msg = f"{title}\n{side_str} {symbol}\nQty: {fill_qty} @ {fill_px}{pnl_str}"
                     self.notifier.notify(notify_msg)
                 
+                # --- OCO Logic: Cancel Sibling Orders ---
+                if is_protection_fill and pos_id:
+                     logger.info(f"OCO Trigger: Protection filled for Position {pos_id}. Checking for sibling orders...")
+                     # Find other orders with same PositionID
+                     orders_to_cancel = []
+                     for oid, o_data in self.open_orders.items():
+                         if oid != order_id and o_data.get('position_id') == pos_id:
+                             # Check if it's a pending protection (Limit or Stop)
+                             o_type = o_data.get('ord_type')
+                             if o_type in ['2', '3']:
+                                 orders_to_cancel.append(oid)
+                     
+                     for oid in orders_to_cancel:
+                         logger.info(f"OCO: Cancelling sibling order {oid} for Position {pos_id}")
+                         self.cancel_order(oid)
+                # ----------------------------------------
+
                 # Update Net Position Tracking
                 try:
-                    f_qty = float(fill_qty)
-                    if side == b'2': # Sell
-                        f_qty = -f_qty
-                    
-                    
-                    # Accumulate net position
-                    # For robust hedging support, we should rely on Position Reports (AP) or distinct logic.
-                    # Since we are switching to Sync-On-Fill, we can skip manual accumulation here 
-                    # OR do a best-effort update.
-                    
-                    # Logic: Side 1 (Buy) adds to Long? Or reduces Short?
-                    # Without knowing if it's "Close" or "Open", it's ambiguous in Hedging.
-                    # Best to rely on the Sync triggered below.
-                    pass
-                    
+                    pass 
                 except Exception as e:
                     logger.error(f"Error updating position from execution report: {e}")
 
@@ -838,28 +869,18 @@ class CTraderFixClient:
                 short_qty = float(msg.get(705).decode()) if msg.get(705) else 0.0
                 pos_id = msg.get(721).decode() if msg.get(721) else None # PositionID
                 
-                # Entry Price (AvgPx) from Tag 731 (SettlPrice), 44 (Price) or 31 (LastPx)?
-                # Standard Position Report (AP) often uses Tag 731 for SettlPrice (Mark-to-Market)
-                # or Tag 730 (SettlPrice)
-                # Let's check available tags in typical cTrader AP response.
-                # Assuming Tag 31 (LastPx) might be used for 'AvgPx' if not explicit.
-                # However, Tag 730 is standard 'SettlPrice'.
-                # Let's try to grab whatever looks like price.
-                # Tag 731 is often used for SettlPriceType.
-                # Tag 730 is SettlPrice.
-                # But for 'Entry Price', we want avg cost.
-                # cTrader FIX API: PositionReport -> No explicit 'Entry Price' tag in standard?
-                # Actually, standard FIX 4.4 Position Report has 'SettlPrice' (730).
-                # But 'AvgPx' might be in Tag 6 (AvgPx) IF provided?
-                # Let's try 730 (SettlPrice) as best proxy or see if 31 is there.
-                
-                # For now, let's use a placeholder if we can't find it, or log it.
-                # Let's try to extract Price (44) if present, or SettlPrice (730).
-                entry_px = 0.0
-                if msg.get(730):
+                # Try Tag 6 (AvgPx) which is standard for Position Avg Price
+                if msg.get(6):
+                    entry_px = float(msg.get(6).decode())
+                elif msg.get(731): # SettlPrice
+                     entry_px = float(msg.get(731).decode())
+                elif msg.get(730): # SettlPrice
                     entry_px = float(msg.get(730).decode())
-                elif msg.get(44):
+                elif msg.get(44): # Price
                     entry_px = float(msg.get(44).decode())
+                
+                # Debug logging for price source
+                # logger.info(f"AP Price Source: AvgPx={msg.get(6)}, SettlPx={msg.get(730)}/{msg.get(731)}, Price={msg.get(44)} -> Used: {entry_px}")
                 
                 # Since Position Report splits Long/Short, it might give One Price?
                 # Usually LongQty and ShortQty are reported. 
@@ -1143,4 +1164,58 @@ class CTraderFixClient:
             logger.info(f"Cached pending protections for {cls_ord_id}")
             
         self.trade_session._send_raw(msg)
-        return cls_ord_id # Return ID for tracking
+    def cancel_order(self, order_id):
+        """Cancel an existing order by OrderID."""
+        if order_id not in self.open_orders:
+            logger.warning(f"Cannot cancel unknown order {order_id}")
+            return
+            
+        order_data = self.open_orders[order_id]
+        orig_cl_ord_id = order_data.get('cl_ord_id')
+        symbol_id = order_data.get('symbol')
+        side = "1" if order_data.get('side') == "BUY" else "2"
+        qty = order_data.get('qty')
+        
+        if not orig_cl_ord_id:
+             logger.error(f"Cannot cancel order {order_id}: Missing ClOrdID")
+             return
+
+        # Order Cancel Request (F)
+        msg = simplefix.FixMessage()
+        self.trade_session._add_header(msg, "F")
+        
+        with self.lock:
+            self.order_counter += 1
+            counter = self.order_counter
+            
+        new_cl_ord_id = f"cx{int(time.time() * 1000)}_{counter}"
+        
+        msg.append_pair(11, new_cl_ord_id) # ClOrdID of the Cancel Request
+        msg.append_pair(41, orig_cl_ord_id) # OrigClOrdID (ID of order to cancel)
+        msg.append_pair(37, order_id) # OrderID (Server ID, optional but good for matching)
+        msg.append_pair(55, symbol_id)
+        msg.append_pair(54, side)
+        msg.append_pair(60, datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3])
+        # Note: quantity is often required even for full cancel
+        msg.append_pair(38, qty)
+        
+        logger.info(f"Sending Cancel Request for Order {order_id} (OrigClOrdID: {orig_cl_ord_id})")
+        self.trade_session._send_raw(msg)
+
+    def _get_fifo_entry_price(self, symbol, close_side_str):
+        """
+        Find the entry price of the most recent 'Open' trade that matches the closing side.
+        close_side_str: "SELL" implies we are closing a Long position (Look for BUY).
+                        "BUY" implies we are closing a Short position (Look for SELL).
+        """
+        target_open_side = "BUY" if close_side_str == "SELL" else "SELL"
+        
+        # Iterate backwards
+        for trade in reversed(self.trade_history):
+            if trade.get('symbol') == symbol and trade.get('side') == target_open_side:
+                try:
+                    price = float(trade.get('price'))
+                    return price
+                except:
+                    pass
+        return 0.0

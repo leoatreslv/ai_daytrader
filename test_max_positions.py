@@ -26,9 +26,11 @@ class TestMaxPositions(unittest.TestCase):
         client.positions['3'] = {'long': 0, 'short': 0}
         self.assertEqual(client.get_open_position_count(), 2)
         
-        # Case 4: Hedged (Both Long and Short on same symbol - still 1 symbol)
+        # Case 4: Hedged (Both Long and Short on same symbol)
+        client.positions.clear() # Clear previous to test isolation
         client.positions['4'] = {'long': 1000, 'short': 1000}
-        self.assertEqual(client.get_open_position_count(), 3)
+        # In new logic, this counts as 2 independent positions (directions)
+        self.assertEqual(client.get_open_position_count(), 2)
 
 if __name__ == '__main__':
     unittest.main()

@@ -310,6 +310,13 @@ def main():
                      if smart_sleep(2): continue
 
                 for symbol in current_targets:
+                    # Double Check Global Position Limit (Race Condition Fix)
+                    # Refresh count in case it changed since loop start (though unlikely in single thread without new msgs)
+                    # But more importantly, check if WE just added a position in this loop.
+                    current_open_count = fix_client.get_open_position_count()
+                    if current_open_count >= config.MAX_OPEN_POSITIONS:
+                         logger.info(f"Max positions reached ({current_open_count}/{config.MAX_OPEN_POSITIONS}). Skipping {symbol}.")
+                         continue
                     df = loader.get_latest_bars(symbol)
                     if df is not None and len(df) > 20:
                          # Run Strategy
