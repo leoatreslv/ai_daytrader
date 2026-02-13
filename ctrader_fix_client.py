@@ -435,12 +435,8 @@ class CTraderFixClient:
         return "\n".join(lines)
 
     def get_open_position_count(self):
-        """Count number of symbols with active open positions."""
-        count = 0
-        for pos_data in self.positions.values():
-            if pos_data.get('long', 0.0) > 0 or pos_data.get('short', 0.0) > 0:
-                count += 1
-        return count
+        """Count total number of open trades (Position IDs)."""
+        return len(self.position_details)
 
     def get_position_pnl_string(self):
         """Get string representation of positions with estimated PnL."""

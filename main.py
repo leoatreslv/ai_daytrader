@@ -196,8 +196,16 @@ def main():
             fix_client.send_order_mass_status_request()
             time.sleep(1)
             fix_client.send_positions_request()
+            fix_client.send_positions_request()
             # Reconcile after initial sync
-            threading.Thread(target=lambda: (time.sleep(5), fix_client.reconcile_protections()), daemon=True).start()
+            def safe_reconcile():
+                time.sleep(5)
+                try:
+                    fix_client.reconcile_protections()
+                except Exception as e:
+                    logger.error(f"Reconciliation failed: {e}")
+
+            threading.Thread(target=safe_reconcile, daemon=True).start()
         else:
             logger.error("Trade Session not logged on after wait. Skipping initial position request.")
 
@@ -294,11 +302,12 @@ def main():
                 # Use copy of active_symbols to handle dynamic changes safely
                 current_targets = list(active_symbols)
                 
+                current_targets = list(active_symbols)
+                
                 # Check Global Position Limit
-                # Check Global Position Limit - MOVED inside signal
-                # open_pos_count = fix_client.get_open_position_count()
-                # if open_pos_count >= config.MAX_OPEN_POSITIONS:
-                #      ... continue
+                open_pos_count = fix_client.get_open_position_count()
+                if open_pos_count >= config.MAX_OPEN_POSITIONS:
+                     if smart_sleep(2): continue
 
                 for symbol in current_targets:
                     df = loader.get_latest_bars(symbol)
