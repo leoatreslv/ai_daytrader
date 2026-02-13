@@ -305,18 +305,19 @@ def main():
                 current_targets = list(active_symbols)
                 
                 # Check Global Position Limit
-                open_pos_count = fix_client.get_open_position_count()
-                if open_pos_count >= config.MAX_OPEN_POSITIONS:
-                     if smart_sleep(2): continue
+                # Removed early exit to allow "Signal Only" mode when full.
+                # open_pos_count = fix_client.get_open_position_count()
+                # if open_pos_count >= config.MAX_OPEN_POSITIONS:
+                #      if smart_sleep(2): continue
+
 
                 for symbol in current_targets:
                     # Double Check Global Position Limit (Race Condition Fix)
-                    # Refresh count in case it changed since loop start (though unlikely in single thread without new msgs)
-                    # But more importantly, check if WE just added a position in this loop.
-                    current_open_count = fix_client.get_open_position_count()
-                    if current_open_count >= config.MAX_OPEN_POSITIONS:
-                         logger.info(f"Max positions reached ({current_open_count}/{config.MAX_OPEN_POSITIONS}). Skipping {symbol}.")
-                         continue
+                    # MOVED check to after Signal Generation to support "Show Signal but Don't Trade"
+                    # current_open_count = fix_client.get_open_position_count()
+                    # if current_open_count >= config.MAX_OPEN_POSITIONS:
+                    #      logger.info(f"Max positions reached ({current_open_count}/{config.MAX_OPEN_POSITIONS}). Skipping {symbol}.")
+                    #      continue
                     df = loader.get_latest_bars(symbol)
                     if df is not None and len(df) > 20:
                          # Run Strategy
@@ -326,6 +327,14 @@ def main():
                              msg = f"🚨 **SIGNAL DETECTED** 🚨\nSymbol: {symbol_name}\nAction: {signal_data['action']}\nReason: {signal_data['reason']}"
                              logger.info(msg)
                              notifier.notify(msg)
+                             
+                             # Check Position Limit BEFORE placing order (Signal Only Mode)
+                             current_open_count = fix_client.get_open_position_count()
+                             if current_open_count >= config.MAX_OPEN_POSITIONS:
+                                 limit_msg = f"⚠️ **LIMIT REACHED** ({current_open_count}/{config.MAX_OPEN_POSITIONS})\nSignal detected but Order SUPPRESSED."
+                                 logger.info(limit_msg)
+                                 notifier.notify(limit_msg)
+                                 continue
                              
                              # Determine Side
                              if signal_data['action'] == 'BUY_CALL':
