@@ -628,6 +628,9 @@ class CTraderFixClient:
             elif exec_type == b'F': # Trade (Partial or Full Fill)
                 pos_id = msg.get(721).decode() if msg.get(721) else None # PositionID
                 
+                # Get filled quantity (LastQty - 32)
+                fill_qty = msg.get(32).decode() if msg.get(32) else "0"
+                
                 # Validation & Fallback for Fill Price
                 fill_p = 0.0
                 try:
