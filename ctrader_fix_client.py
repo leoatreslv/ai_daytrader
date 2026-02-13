@@ -621,8 +621,11 @@ class CTraderFixClient:
             if exec_type == b'0': # New
                 logger.info(f"[{source}] Order Accepted: {side_str} {symbol} {qty}")
                 # Add to Open Orders Tracking
+                pos_id = msg.get(721).decode() if msg.get(721) else None
                 self.open_orders[order_id] = {
-                    "symbol": symbol, "side": side_str, "qty": qty, "price": price
+                    "symbol": symbol, "side": side_str, "qty": qty, "price": price,
+                    "position_id": pos_id, 
+                    "ord_type": msg.get(40).decode() if msg.get(40) else '1'
                 }
                 if self.notifier: self.notifier.notify(f"✅ **ORDER ACCEPTED**\n{side_str} {symbol} {qty}")
             
@@ -806,8 +809,11 @@ class CTraderFixClient:
             elif exec_type == b'I': # Order Status (Response to Mass Status)
                 # If active, add to tracking
                 if ord_status not in [b'2', b'8', b'4']: # Not Filled/Rejected/Canceled
+                     pos_id = msg.get(721).decode() if msg.get(721) else None
                      self.open_orders[order_id] = {
-                        "symbol": symbol, "side": side_str, "qty": qty, "price": price
+                        "symbol": symbol, "side": side_str, "qty": qty, "price": price,
+                        "position_id": pos_id,
+                        "ord_type": msg.get(40).decode() if msg.get(40) else '1'
                     }
                 
                 # If Filled, trigger a Sync to maintain accurate positions
@@ -816,7 +822,9 @@ class CTraderFixClient:
                     def scheduled_sync():
                         time.sleep(1)
                         self.clear_state()
-                        self.send_positions_request()
+                        self.send_order_mass_status_request() # Get orders first
+                        time.sleep(1)
+                        self.send_positions_request() # Then positions (which triggers reconciliation)
                         
                     threading.Thread(target=scheduled_sync, daemon=True).start()
 
@@ -926,6 +934,62 @@ class CTraderFixClient:
 
         else:
             logger.debug(f"[{source}] Unknown MsgType: {msg_type}")
+
+    def reconcile_protections(self):
+        """Check all open positions and ensure they have SL/TP orders."""
+        if not self.position_details:
+            logger.info("No detailed positions to reconcile.")
+            return
+
+        logger.info(f"Reconciling protections for {len(self.position_details)} positions...")
+        
+        for pos_id, details in self.position_details.items():
+            symbol_id = details['symbol_id']
+            qty = details['qty']
+            side = details['side'] # 'long' or 'short'
+            entry_px = details['entry_price']
+            
+            # Find existing protections for this PositionID
+            has_sl = False
+            has_tp = False
+            
+            for oid, order in self.open_orders.items():
+                if order.get('position_id') == pos_id:
+                    ord_type = order.get('ord_type')
+                    if ord_type == '3': has_sl = True
+                    if ord_type == '2': has_tp = True
+            
+            if has_sl and has_tp:
+                continue # Already protected
+                
+            logger.info(f"Position {pos_id} ({symbol_id}) missing protections: SL={not has_sl}, TP={not has_tp}")
+            
+            # Determine prices based on config
+            # Use current entry price as baseline if we don't have a better one
+            if entry_px <= 0:
+                # Fallback to latest market price if entry is unknown (snapshot might lack it)
+                entry_px = self.latest_prices.get(symbol_id, 0.0)
+            
+            if entry_px <= 0:
+                logger.warning(f"Cannot protect Position {pos_id}: Entry price and Market price unknown.")
+                continue
+
+            sl_dist = entry_px * config.STOP_LOSS_PCT
+            tp_dist = entry_px * config.TAKE_PROFIT_PCT
+            
+            prot_side = '2' if side == 'long' else '1'
+            
+            if not has_sl:
+                sl_px = entry_px - sl_dist if side == 'long' else entry_px + sl_dist
+                sl_str = f"{sl_px:.2f}"
+                logger.info(f"Submitting Missing SL: {sl_str} for Position {pos_id}")
+                self.submit_order(symbol_id, qty, prot_side, order_type='3', stop_px=sl_str, position_id=pos_id)
+                
+            if not has_tp:
+                tp_px = entry_px + tp_dist if side == 'long' else entry_px - tp_dist
+                tp_str = f"{tp_px:.2f}"
+                logger.info(f"Submitting Missing TP: {tp_str} for Position {pos_id}")
+                self.submit_order(symbol_id, qty, prot_side, order_type='2', price=tp_str, position_id=pos_id)
 
     def clear_state(self):
         """Clear internal state (Orders/Positions) before a sync."""

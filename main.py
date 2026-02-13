@@ -98,6 +98,7 @@ def listen_for_commands(notifier, fix_client, loader): # Added loader to args
                     
                     # Give it a moment to populate, then confirm
                     time.sleep(3) 
+                    fix_client.reconcile_protections()
                     notifier.notify(f"✅ **SYNC COMPLETE**\n\n{fix_client.get_orders_string()}\n\n{fix_client.get_position_pnl_string()}")
 
                 elif cmd == "/report":
@@ -191,7 +192,11 @@ def main():
             
         if fix_client.trade_session.logged_on:
             fix_client.clear_state()
+            fix_client.send_order_mass_status_request()
+            time.sleep(1)
             fix_client.send_positions_request()
+            # Reconcile after initial sync
+            threading.Thread(target=lambda: (time.sleep(5), fix_client.reconcile_protections()), daemon=True).start()
         else:
             logger.error("Trade Session not logged on after wait. Skipping initial position request.")
 
