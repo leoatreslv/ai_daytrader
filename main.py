@@ -1,4 +1,5 @@
 import time
+import threading
 import config
 from ctrader_fix_client import CTraderFixClient
 from data_loader import DataLoader
@@ -220,7 +221,6 @@ def main():
             fix_client.subscribe_market_data(symbol, f"req_{symbol}")
         
         # Start Command Listener
-        import threading
         # Pass 'loader' to listener for chart generation
         cmd_thread = threading.Thread(target=listen_for_commands, args=(notifier, fix_client, loader), daemon=True)
         cmd_thread.start()
