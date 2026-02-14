@@ -330,6 +330,8 @@ def main():
                              
                              # Check Position Limit BEFORE placing order (Signal Only Mode)
                              current_open_count = fix_client.get_open_position_count()
+                             logger.info(f"Current Open Positions: {current_open_count}/{config.MAX_OPEN_POSITIONS}")
+                             
                              if current_open_count >= config.MAX_OPEN_POSITIONS:
                                  limit_msg = f"⚠️ **LIMIT REACHED** ({current_open_count}/{config.MAX_OPEN_POSITIONS})\nSignal detected but Order SUPPRESSED."
                                  logger.info(limit_msg)

@@ -437,9 +437,19 @@ class CTraderFixClient:
     def get_open_position_count(self):
         """Count total number of open trades based on active symbols."""
         count = 0
-        for pos_data in self.positions.values():
-            if pos_data.get('long', 0) > 0: count += 1
-            if pos_data.get('short', 0) > 0: count += 1
+        details = []
+        for symbol, pos_data in self.positions.items():
+            if pos_data.get('long', 0) > 0: 
+                count += 1
+                details.append(f"{symbol}(L:{pos_data['long']})")
+            if pos_data.get('short', 0) > 0: 
+                count += 1
+                details.append(f"{symbol}(S:{pos_data['short']})")
+        
+        # Log details if count > 0 to help debug "Ghost Positions"
+        if count > 0:
+            logger.debug(f"Open Positions Breakdown: {', '.join(details)} (Total: {count})")
+            
         return count
 
     def get_position_pnl_string(self):
