@@ -786,9 +786,66 @@ class CTraderFixClient:
                          self.cancel_order(oid)
                 # ----------------------------------------
 
-                # Update Net Position Tracking
+                # Update Net Position Tracking (Crucial for Rate Limiting)
                 try:
-                    pass 
+                    if pos_data: # If we have symbol and side
+                        # Normalize symbol
+                        current_pos = self.positions.get(symbol, {'long': 0, 'short': 0})
+                        
+                        # Determine effect of trade
+                        # Side 1 = Buy, 2 = Sell
+                        # If Buy: Increases Long (if opening) or Decreases Short (if closing)?
+                        # cTrader FIX reports PositionID. 
+                        # If we have a PositionID, we can assume it's contributing to exposure.
+                        # Simple Netting Logic for Count:
+                        
+                        trade_qty = float(fill_qty)
+                        
+                        if side_str == "BUY":
+                             # If we were short, this reduces short. If flat/long, adds to long.
+                             # But in Hedging, Buy is Long.
+                             # Let's assume Hedging for safety (Add to Long)
+                             # However, if this was a Close (Closing a Short), we should reduce Short.
+                             # How do we know?
+                             # In FIX, if PosID aligns with known Short position?
+                             # SIMPLIFICATION: just Add to Long / Short stats blindly for "Gross" exposure
+                             # Use simple logic: Buy -> +Long, Sell -> +Short? 
+                             # No, that breaks simple netting.
+                             
+                             # Correct Approach:
+                             # If opening (PosID not seen or new?): Increase.
+                             # If closing?
+                             # We don't verify "Open/Close" flag easily here without 77 (OpenClose).
+                             # But we know `self.positions[symbol]` stores NET quantities usually from PositionReport.
+                             
+                             # BEST EFFORT UPDATE:
+                             # If Side=BUY:
+                             if current_pos['short'] > 0:
+                                 # Reducing short
+                                 remaining = current_pos['short'] - trade_qty
+                                 if remaining < 0:
+                                     current_pos['short'] = 0
+                                     current_pos['long'] += abs(remaining)
+                                 else:
+                                     current_pos['short'] = remaining
+                             else:
+                                 current_pos['long'] += trade_qty
+                                 
+                        elif side_str == "SELL":
+                             if current_pos['long'] > 0:
+                                 # Reducing long
+                                 remaining = current_pos['long'] - trade_qty
+                                 if remaining < 0:
+                                     current_pos['long'] = 0
+                                     current_pos['short'] += abs(remaining)
+                                 else:
+                                     current_pos['long'] = remaining
+                             else:
+                                 current_pos['short'] += trade_qty
+
+                        self.positions[symbol] = current_pos
+                        logger.info(f"Updated Internal Position Cache for {symbol}: {current_pos}")
+
                 except Exception as e:
                     logger.error(f"Error updating position from execution report: {e}")
 
